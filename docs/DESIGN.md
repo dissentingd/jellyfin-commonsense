@@ -124,7 +124,7 @@ kept and the rest is picked up on a later run.
 - **Restore** re-applies a ledger — the stored one or an uploaded file — matching by item id first, then
   TMDb/IMDb/TVDb id, so it survives re-scans and database restores. It always shows a dry-run count first.
 - **Export** snapshots every Custom Rating in the library (including hand-set ones) in ledger format.
-- Jellyfin's NFO saver (if enabled) also writes `<customrating>`, giving a second copy beside the media.
+- Jellyfin's NFO saver (if enabled) also writes `<customrating>`, giving a second copy beside the media (verified).
 
 ## Surfaces
 
@@ -155,5 +155,12 @@ kept and the rest is picked up on a later run.
 ## Still to verify / improve
 
 - Auto-rate fires once per new item or episode and not on unrelated updates.
-- Write speed: a first Apply on a large library (thousands of titles, tens of thousands of episodes)
-  takes hours even with episodes batched; profile whether the per-item NFO save dominates.
+
+## Write cost (measured 2026-09-29)
+
+On a large library (hundreds of thousands of items in Jellyfin's database), re-saving one episode costs
+~220 ms however it's done — `UpdateItemsAsync` batches of 20 (~260 ms each), with or without the NFO saver
+(~5% more with it), or one `UpdateItemAsync` at a time (~380 ms). The cost is Jellyfin's own item save, so
+the plugin can't remove it; it can only write less. Hence: only the first Apply is slow (every rated title
+plus its episodes — a couple of hours at that scale); later runs write only changes, new episodes and
+repairs. With the NFO saver enabled, each written item's `.nfo` also gets `<customrating>`.
