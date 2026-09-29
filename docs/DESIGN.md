@@ -62,6 +62,15 @@ Implemented in `Rating/RatingEngine.cs` (pure, unit-tested):
 6. No candidates → **Review** when the item is unrated/unscorable or carries an *unverified* rating
    (`Approved`, `Passed`); otherwise **Keep**.
 
+### Enforcement value (verified 2026-09-29)
+
+Jellyfin doesn't filter on the rating strings at query time: it filters on each item's stored
+`InheritedParentalRatingValue` / `InheritedParentalRatingSubValue`. The metadata editor recomputes those on
+save; a plain `ILibraryManager.UpdateItemAsync` does **not** — the first live Apply wrote thousands of
+Custom Ratings that had no effect at all (e.g. `XXX` still enforcing 17). Every write now sets both values
+from `BaseItem.GetParentalRatingScore()` before saving, and each run **repairs** any of our ratings whose
+stored value is out of step (reported as *repaired*).
+
 ### Series and episodes (verified 2026-09-29)
 
 Enforcement is **per item**: an episode is filtered on its own rating, not its series'. A test series
@@ -130,7 +139,9 @@ kept and the rest is picked up on a later run.
 ## Safety
 
 - Nothing is written until Apply runs; the settings page asks for confirmation.
-- Writes go through `ILibraryManager.UpdateItemAsync` (the same path as the metadata editor), never the DB.
+- Writes go through `ILibraryManager.UpdateItemAsync` / `UpdateItemsAsync` (episodes in chunks of 100),
+  never the DB, and always recompute the stored enforcement value (see above).
+- The ledger is checkpointed every 200 items, so an interrupted Apply still knows which ratings are ours.
 - Only one run at a time.
 
 ## To verify on a live server

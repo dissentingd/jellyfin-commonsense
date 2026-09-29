@@ -228,6 +228,7 @@ public sealed class CommonSenseService(
         var countries = SplitList(config.Countries);
         var counts = Enum.GetValues<DecisionKind>().ToDictionary(k => k.ToString(), _ => 0);
         var done = 0;
+        var itemsSinceSave = 0;
         foreach (var item in items)
         {
             ct.ThrowIfCancellationRequested();
@@ -262,6 +263,29 @@ public sealed class CommonSenseService(
 
             // A series' rating only hides its episodes from search, Next Up and Latest if the
             // episodes carry it too, so push it down - including to episodes added since last time.
+            if (!changes && snap.CustomRatingIsOurs && EnforcementStale(item))
+            {
+                // Our rating is recorded but Jellyfin isn't enforcing it (written before the fix): re-save it.
+                report.Repaired++;
+                if (apply)
+                {
+                    try
+                    {
+                        await WriteAsync(item, item.CustomRating!, ct).ConfigureAwait(false);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        logger.LogWarning(ex, "Failed to repair Custom Rating for {Name}", item.Name);
+                    }
+                }
+            }
+
+            if (apply && ++itemsSinceSave >= 200)
+            {
+                ledger.Save(); // so an interrupted run still knows which ratings are ours
+                itemsSinceSave = 0;
+            }
+
             var seriesRating = changes ? decision.NewRating : snap.CustomRatingIsOurs ? item.CustomRating : null;
             if (item is Series && seriesRating is not null && entry?.Error is null)
             {
@@ -500,13 +524,19 @@ public sealed class CommonSenseService(
             Recursive = true,
         });
 
-        var updated = 0;
+        var toWrite = new List<BaseItem>();
         foreach (var child in children)
         {
             ct.ThrowIfCancellationRequested();
             var effective = new[] { child.CustomRating, child.OfficialRating }.FirstOrDefault(r => !string.IsNullOrWhiteSpace(r))?.Trim();
             if (effective is not null && scale.Score(effective) is { } current && current >= target)
             {
+                // Already rated enough - but a write from before the enforcement fix may not be in effect.
+                if (string.Equals(child.CustomRating, rating, StringComparison.Ordinal) && EnforcementStale(child))
+                {
+                    toWrite.Add(child);
+                }
+
                 continue;
             }
 
@@ -519,19 +549,51 @@ public sealed class CommonSenseService(
                 continue;
             }
 
-            updated++;
-            if (apply)
+            toWrite.Add(child);
+        }
+
+        if (apply)
+        {
+            // One repository save per chunk instead of one per episode: a long-running series is
+            // hundreds of items.
+            foreach (var chunk in toWrite.Chunk(100))
             {
-                await WriteAsync(child, rating, ct).ConfigureAwait(false);
+                foreach (var child in chunk)
+                {
+                    SetRating(child, rating);
+                }
+
+                await libraryManager.UpdateItemsAsync(chunk, series, ItemUpdateType.MetadataEdit, ct).ConfigureAwait(false);
             }
         }
 
+        var updated = toWrite.Count;
         return updated;
+    }
+
+    /// <summary>
+    /// Whether the score Jellyfin actually filters on (<c>InheritedParentalRatingValue</c>) is out of
+    /// step with the item's rating. The metadata editor recomputes it on save; a plain
+    /// <c>UpdateItemAsync</c> doesn't, so a Custom Rating written without it isn't enforced at all.
+    /// </summary>
+    private static bool EnforcementStale(BaseItem item)
+    {
+        var score = item.GetParentalRatingScore();
+        return item.InheritedParentalRatingValue != score?.Score
+            || (item.InheritedParentalRatingSubValue ?? 0) != (score?.SubScore ?? 0);
+    }
+
+    private static void SetRating(BaseItem item, string rating)
+    {
+        item.CustomRating = rating;
+        var score = item.GetParentalRatingScore();
+        item.InheritedParentalRatingValue = score?.Score;
+        item.InheritedParentalRatingSubValue = score?.SubScore;
     }
 
     private async Task WriteAsync(BaseItem item, string rating, CancellationToken ct)
     {
-        item.CustomRating = rating;
+        SetRating(item, rating);
         await libraryManager.UpdateItemAsync(item, item.GetParent(), ItemUpdateType.MetadataEdit, ct).ConfigureAwait(false);
     }
 }

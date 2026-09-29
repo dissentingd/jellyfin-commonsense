@@ -60,6 +60,9 @@ public sealed class RunReport
     /// <summary>Gets or sets how many seasons and episodes were (or would be) given their series' rating.</summary>
     public int ChildrenUpdated { get; set; }
 
+    /// <summary>Gets or sets how many of our ratings were re-saved because Jellyfin wasn't enforcing them.</summary>
+    public int Repaired { get; set; }
+
     /// <summary>Gets or sets counts per outcome.</summary>
     public Dictionary<string, int> Counts { get; set; } = [];
 
