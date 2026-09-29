@@ -144,9 +144,16 @@ kept and the rest is picked up on a later run.
 - The ledger is checkpointed every 200 items, so an interrupted Apply still knows which ratings are ours.
 - Only one run at a time.
 
-## To verify on a live server
+## Verified on a live server (Jellyfin 12.1, 2026-09-29)
 
-- The cascade (above) via `UpdateItemAsync`: children get the rating, and a capped user loses the
-  episodes from search / Next Up / Latest.
-- MDBList's real response shape for `commonsense` / `age_rating` on a batch call.
-- Auto-rate fires once per new item and not on unrelated updates.
+- Foreign certifications score as expected through `/CommonSense/Score`.
+- A full Apply plus the enforcement repair: every item carrying one of our Custom Ratings has the
+  matching stored score (e.g. `XXX` → 1000, `TV-MA` → 17.1), movies through episodes.
+- A capped user loses an `XXX` movie from search and listings, and an `XXX` series from listings along
+  with all of its episodes (browse and search); an uncapped user with the same libraries still sees both.
+
+## Still to verify / improve
+
+- Auto-rate fires once per new item or episode and not on unrelated updates.
+- Write speed: a first Apply on a large library (thousands of titles, tens of thousands of episodes)
+  takes hours even with episodes batched; profile whether the per-item NFO save dominates.
