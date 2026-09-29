@@ -7,6 +7,15 @@
     "owner": "dissentingd",
     "category": "General",
     "imageUrl": "",
-    "versions": []
+    "versions": [
+      {
+        "version": "1.0.0.0",
+        "changelog": "First release, verified on Jellyfin 12.1.\n\n- Re-rates movies and series by writing Custom Ratings: your rules first (tag, genre or collection →\n  rating), then the consensus of TMDb certifications from chosen countries and Common Sense Media ages\n  (via MDBList), mapped to the nearest rating on a per-type ladder.\n- Raise-only by default; a foreign 18 becomes R, never NC-17; titles with nothing to go on go to a\n  review list instead of being guessed.\n- Series ratings are copied to their seasons and episodes, which Jellyfin enforces separately.\n- Every write updates the score Jellyfin's parental controls actually filter on.\n- Preview (dry run), Apply and Restore as scheduled tasks; a report on the settings page; a ledger you\n  can download, export and restore by TMDb/IMDb/TVDb id.\n- Optional auto-rating of new titles and episodes.",
+        "targetAbi": "12.1.0.0",
+        "sourceUrl": "https://github.com/dissentingd/jellyfin-ratings-fixer/releases/download/v1.0.0/jellyfin-ratings-fixer_1.0.0.zip",
+        "checksum": "6108951b7aa6926b700923d487cfb31a",
+        "timestamp": "2026-09-29T20:05:21Z"
+      }
+    ]
   }
 ]
