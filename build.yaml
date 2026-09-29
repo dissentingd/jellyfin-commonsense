@@ -1,0 +1,17 @@
+# Metadata for packaging with jprm (https://github.com/oddstr13/jellyfin-plugin-repository-manager).
+name: "Common Sense Ratings"
+guid: "65127be7-01ef-469f-b13b-ecfa1289f5ed"
+version: "0.1.0.0"
+targetAbi: "12.1.0.0"
+framework: "net10.0"
+owner: "dissentingd"
+overview: "Re-rate your library to modern parental-rating standards."
+description: >
+  Writes stricter Custom Ratings from TMDb certifications, Common Sense Media ages
+  (via MDBList) and your own rules, so Jellyfin's parental controls work on old and
+  unrated titles. Raise-only, dry-run first, with a restorable ledger.
+category: "General"
+artifacts:
+  - "Jellyfin.Plugin.CommonSense.dll"
+changelog: >
+  Initial release.

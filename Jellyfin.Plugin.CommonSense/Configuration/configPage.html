@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Common Sense Ratings</title>
+</head>
+<body>
+<div id="commonSenseConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-select,emby-checkbox,emby-textarea">
+    <div data-role="content">
+        <div class="content-primary">
+            <style>
+                #commonSenseConfigPage .cs-rule { display: flex; gap: .5em; align-items: end; margin-bottom: .5em; flex-wrap: wrap; }
+                #commonSenseConfigPage .cs-rule > * { flex: 1 1 10em; margin: 0; }
+                #commonSenseConfigPage .cs-rule > button { flex: 0 0 auto; }
+                #commonSenseConfigPage .cs-actions { display: flex; flex-wrap: wrap; gap: .5em; margin: 1em 0; }
+                #commonSenseConfigPage .cs-actions button { margin: 0; }
+                #commonSenseConfigPage .cs-counts { display: flex; flex-wrap: wrap; gap: 1.5em; margin: .5em 0 1em; }
+                #commonSenseConfigPage .cs-counts b { font-size: 1.4em; display: block; }
+                #commonSenseConfigPage .cs-table { width: 100%; border-collapse: collapse; font-size: .9em; }
+                #commonSenseConfigPage .cs-table th, #commonSenseConfigPage .cs-table td { text-align: left; padding: .35em .5em; border-bottom: 1px solid rgba(128,128,128,.25); vertical-align: top; }
+                #commonSenseConfigPage .cs-muted { opacity: .7; font-size: .9em; }
+                #commonSenseConfigPage .cs-warn { color: #e0a030; }
+                #commonSenseConfigPage .cs-err { color: #e05050; }
+                #commonSenseConfigPage .cs-filters { display: flex; gap: .5em; flex-wrap: wrap; align-items: end; }
+                #commonSenseConfigPage .cs-filters > * { flex: 1 1 12em; margin: 0; }
+            </style>
+
+            <form id="commonSenseConfigForm">
+                <div class="verticalSection">
+                    <h2 class="sectionTitle">Common Sense Ratings</h2>
+                    <p class="cs-muted">Writes stricter <b>Custom Ratings</b> so parental controls work on old and unrated titles.
+                        The official rating is never touched, and metadata refreshes don't overwrite Custom Ratings.
+                        Always run <b>Preview</b> first and read the report below.</p>
+                </div>
+
+                <div class="verticalSection">
+                    <h3 class="sectionTitle">Sources</h3>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label><input is="emby-checkbox" type="checkbox" id="UseTmdb" /><span>Use TMDb certifications</span></label>
+                        <div class="fieldDescription checkboxFieldDescription">Current certifications from rating boards around the world, including re-ratings of old films on re-release.</div>
+                    </div>
+                    <div class="inputContainer">
+                        <input is="emby-input" type="password" id="TmdbApiKey" label="TMDb API key or read access token" autocomplete="off" />
+                        <div class="fieldDescription">Free from themoviedb.org → Settings → API.</div>
+                    </div>
+                    <div class="inputContainer">
+                        <input is="emby-input" type="text" id="Countries" label="Countries whose ratings count" />
+                        <div class="fieldDescription">ISO country codes, comma-separated.</div>
+                    </div>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label><input is="emby-checkbox" type="checkbox" id="UseCommonSense" /><span>Use Common Sense Media ages (via MDBList)</span></label>
+                        <div class="fieldDescription checkboxFieldDescription">Content-based age advice for mainstream titles. Needs an MDBList key.</div>
+                    </div>
+                    <div class="inputContainer">
+                        <input is="emby-input" type="password" id="MdblistApiKey" label="MDBList API key" autocomplete="off" />
+                        <div class="fieldDescription">Free from mdblist.com → Preferences. The free tier has a daily request limit; lookups are cached, so a large library may take a few days of runs to fill in.</div>
+                    </div>
+                    <div class="inputContainer">
+                        <input is="emby-input" type="number" id="CacheDays" min="0" label="Cache source lookups for (days)" />
+                    </div>
+                </div>
+
+                <div class="verticalSection">
+                    <h3 class="sectionTitle">Rules</h3>
+                    <p class="cs-muted">Rules win over every source. For example: collection “Adult” → <code>XXX</code>, which hides those items from every account with a maximum rating set.</p>
+                    <div id="cs-rules"></div>
+                    <button is="emby-button" type="button" class="raised" id="cs-add-rule"><span>Add rule</span></button>
+                </div>
+
+                <div class="verticalSection">
+                    <h3 class="sectionTitle">Behaviour</h3>
+                    <div class="selectContainer">
+                        <select is="emby-select" id="Combine" label="When sources disagree">
+                            <option value="Median">Use the consensus (middle answer)</option>
+                            <option value="Strictest">Use the strictest answer</option>
+                        </select>
+                        <div class="fieldDescription">Consensus stops one unusually strict country from re-rating a title on its own. Rules always win regardless.</div>
+                    </div>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label><input is="emby-checkbox" type="checkbox" id="RoundToNearest" /><span>Round to the nearest rating</span></label>
+                        <div class="fieldDescription checkboxFieldDescription">The US scale jumps from PG-13 (13) to R (17). On: a 15 becomes PG-13 and a 16 becomes R. Off: anything above 13 becomes R. A foreign 18 becomes R either way — NC-17 and XXX only come from rules or an actual NC-17.</div>
+                    </div>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label><input is="emby-checkbox" type="checkbox" id="RaiseOnly" /><span>Only ever make ratings stricter</span></label>
+                        <div class="fieldDescription checkboxFieldDescription">Recommended. When off, a source that rates a title more leniently can lower it too.</div>
+                    </div>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label><input is="emby-checkbox" type="checkbox" id="RespectManualCustomRating" /><span>Leave hand-set Custom Ratings alone</span></label>
+                    </div>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label><input is="emby-checkbox" type="checkbox" id="RespectLockedRating" /><span>Leave items with a locked rating field alone</span></label>
+                    </div>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label><input is="emby-checkbox" type="checkbox" id="AutoRateNewItems" /><span>Rate new items automatically</span></label>
+                        <div class="fieldDescription checkboxFieldDescription">Applies the same rules to movies and series as their metadata is downloaded. Turn on once you're happy with a full run.</div>
+                    </div>
+                    <div class="inputContainer">
+                        <input is="emby-input" type="text" id="MovieLadder" label="Ratings a movie can be given (loosest first)" />
+                    </div>
+                    <div class="inputContainer">
+                        <input is="emby-input" type="text" id="SeriesLadder" label="Ratings a series can be given (loosest first)" />
+                        <div class="fieldDescription">A source's rating is rounded up to the next step on the ladder, e.g. a German FSK 16 becomes R.</div>
+                    </div>
+                    <div class="inputContainer">
+                        <textarea is="emby-textarea" id="LegacyMap" rows="5" label="Legacy ratings Jellyfin can't score (OLD=NEW, one per line)"></textarea>
+                    </div>
+                    <div class="inputContainer">
+                        <input is="emby-input" type="text" id="UnverifiedRatings" label="Ratings that don't mean anything modern" />
+                        <div class="fieldDescription">Items still carrying one of these with no source to go on are listed for review.</div>
+                    </div>
+                </div>
+
+                <button is="emby-button" type="submit" class="raised button-submit block"><span>Save</span></button>
+            </form>
+
+            <div class="verticalSection">
+                <h3 class="sectionTitle">Run</h3>
+                <p class="cs-muted">Save your settings first. Runs happen in the background as scheduled tasks (Dashboard → Scheduled Tasks → Common Sense), where you can also schedule them.</p>
+                <div class="cs-actions">
+                    <button is="emby-button" type="button" class="raised" id="cs-preview"><span>Preview (dry run)</span></button>
+                    <button is="emby-button" type="button" class="raised" id="cs-apply"><span>Apply</span></button>
+                    <button is="emby-button" type="button" class="raised" id="cs-refresh"><span>Refresh report</span></button>
+                    <button is="emby-button" type="button" class="raised" id="cs-clear-cache"><span>Clear source cache</span></button>
+                </div>
+            </div>
+
+            <div class="verticalSection">
+                <h3 class="sectionTitle">Ledger</h3>
+                <p class="cs-muted">Every Custom Rating this plugin writes is recorded here. Keep a copy: if you ever restore Jellyfin's database from an older backup, Restore puts the ratings back, matching titles by TMDb/IMDb/TVDb id.</p>
+                <div class="cs-actions">
+                    <button is="emby-button" type="button" class="raised" id="cs-ledger"><span>Download ledger</span></button>
+                    <button is="emby-button" type="button" class="raised" id="cs-export"><span>Export all Custom Ratings</span></button>
+                    <button is="emby-button" type="button" class="raised" id="cs-restore"><span>Restore from file…</span></button>
+                    <input type="file" id="cs-restore-file" accept=".json,application/json" style="display:none" />
+                </div>
+                <div id="cs-restore-result"></div>
+            </div>
+
+            <div class="verticalSection">
+                <h3 class="sectionTitle">Latest report</h3>
+                <div id="cs-report"><p class="cs-muted">No report yet — run a preview.</p></div>
+            </div>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        (function () {
+            var pluginId = '65127be7-01ef-469f-b13b-ecfa1289f5ed';
+            var page = document.querySelector('#commonSenseConfigPage');
+            var textFields = ['Combine', 'TmdbApiKey', 'Countries', 'MdblistApiKey', 'MovieLadder', 'SeriesLadder', 'LegacyMap', 'UnverifiedRatings'];
+            var boolFields = ['UseTmdb', 'UseCommonSense', 'RoundToNearest', 'RaiseOnly', 'RespectManualCustomRating', 'RespectLockedRating', 'AutoRateNewItems'];
+            var report = null;
+
+            function $(sel) { return page.querySelector(sel); }
+            function esc(s) {
+                return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+                    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+                });
+            }
+
+            function addRule(rule) {
+                rule = rule || { Match: 'Collection', Value: '', Rating: 'XXX' };
+                var row = document.createElement('div');
+                row.className = 'cs-rule';
+                row.innerHTML =
+                    '<div class="selectContainer" style="margin:0"><select is="emby-select" class="cs-match" label="Match">' +
+                    ['Tag', 'Genre', 'Collection'].map(function (m) { return '<option value="' + m + '">' + m + '</option>'; }).join('') +
+                    '</select></div>' +
+                    '<div class="inputContainer" style="margin:0"><input is="emby-input" type="text" class="cs-value" label="Name" /></div>' +
+                    '<div class="inputContainer" style="margin:0"><input is="emby-input" type="text" class="cs-rating" label="Rating" /></div>' +
+                    '<button is="emby-button" type="button" class="raised cs-remove" title="Remove"><span>Remove</span></button>';
+                row.querySelector('.cs-match').value = rule.Match;
+                row.querySelector('.cs-value').value = rule.Value;
+                row.querySelector('.cs-rating').value = rule.Rating;
+                row.querySelector('.cs-remove').addEventListener('click', function () { row.remove(); });
+                $('#cs-rules').appendChild(row);
+            }
+
+            function load() {
+                Dashboard.showLoadingMsg();
+                ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                    textFields.forEach(function (f) { $('#' + f).value = config[f] || ''; });
+                    boolFields.forEach(function (f) { $('#' + f).checked = !!config[f]; });
+                    $('#CacheDays').value = config.CacheDays;
+                    $('#cs-rules').innerHTML = '';
+                    (config.Rules || []).forEach(addRule);
+                    Dashboard.hideLoadingMsg();
+                });
+                loadReport();
+            }
+
+            function save(e) {
+                e.preventDefault();
+                Dashboard.showLoadingMsg();
+                ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                    textFields.forEach(function (f) { config[f] = $('#' + f).value; });
+                    boolFields.forEach(function (f) { config[f] = $('#' + f).checked; });
+                    config.CacheDays = parseInt($('#CacheDays').value, 10) || 0;
+                    config.Rules = Array.prototype.map.call(page.querySelectorAll('.cs-rule'), function (row) {
+                        return {
+                            Match: row.querySelector('.cs-match').value,
+                            Value: row.querySelector('.cs-value').value.trim(),
+                            Rating: row.querySelector('.cs-rating').value.trim()
+                        };
+                    }).filter(function (r) { return r.Value && r.Rating; });
+                    ApiClient.updatePluginConfiguration(pluginId, config).then(Dashboard.processPluginConfigurationUpdateResult);
+                });
+                return false;
+            }
+
+            function startTask(key, label) {
+                ApiClient.getScheduledTasks({ isHidden: false }).then(function (tasks) {
+                    var task = tasks.filter(function (t) { return t.Key === key; })[0];
+                    if (!task) { Dashboard.alert('Task not found — restart Jellyfin after installing the plugin.'); return; }
+                    ApiClient.startScheduledTask(task.Id).then(function () {
+                        Dashboard.alert(label + ' started. Progress shows under Dashboard → Scheduled Tasks; refresh the report when it finishes.');
+                    });
+                });
+            }
+
+            function download(path, name) {
+                ApiClient.ajax({ type: 'GET', url: ApiClient.getUrl(path), dataType: 'text' }).then(function (text) {
+                    var a = document.createElement('a');
+                    a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+                    a.download = name;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                });
+            }
+
+            function loadReport() {
+                ApiClient.ajax({ type: 'GET', url: ApiClient.getUrl('CommonSense/Report'), dataType: 'json' }).then(function (r) {
+                    report = r;
+                    renderReport();
+                }, function () {
+                    report = null;
+                    $('#cs-report').innerHTML = '<p class="cs-muted">No report yet — run a preview.</p>';
+                });
+            }
+
+            function renderReport() {
+                var r = report;
+                var counts = r.Counts || r.counts || {};
+                var entries = r.Entries || r.entries || [];
+                var warnings = r.Warnings || r.warnings || [];
+                var applied = r.Applied || r.applied;
+                var finished = r.Finished || r.finished;
+                var html = '<p class="cs-muted">' + (applied ? 'Apply' : 'Preview') + ' run, finished ' + esc(new Date(finished).toLocaleString()) +
+                    ' — ' + esc(r.ItemsScanned || r.itemsScanned) + ' items scanned.</p>';
+                html += '<div class="cs-counts">' + ['Raise', 'Lower', 'Review', 'Skip', 'Keep'].map(function (k) {
+                    return '<div><b>' + esc(counts[k] || 0) + '</b>' + ({ Raise: 'stricter', Lower: 'looser', Review: 'need review', Skip: 'skipped', Keep: 'unchanged' })[k] + '</div>';
+                }).join('') + '<div><b>' + esc(r.ChildrenUpdated || r.childrenUpdated || 0) + '</b>seasons/episodes given their series' rating</div></div>';
+                warnings.forEach(function (w) { html += '<p class="cs-warn">⚠ ' + esc(w) + '</p>'; });
+                html += '<div class="cs-filters">' +
+                    '<div class="selectContainer" style="margin:0"><select is="emby-select" id="cs-filter-kind" label="Show">' +
+                    '<option value="Raise">Stricter</option><option value="Review">Needs review</option><option value="Lower">Looser</option><option value="Skip">Skipped</option><option value="">All</option></select></div>' +
+                    '<div class="inputContainer" style="margin:0"><input is="emby-input" type="search" id="cs-filter-text" label="Search" /></div></div>' +
+                    '<div id="cs-rows"></div>';
+                $('#cs-report').innerHTML = html;
+                $('#cs-filter-kind').addEventListener('change', renderRows);
+                $('#cs-filter-text').addEventListener('input', renderRows);
+                renderRows();
+            }
+
+            function renderRows() {
+                var entries = report.Entries || report.entries || [];
+                var kind = $('#cs-filter-kind').value;
+                var text = $('#cs-filter-text').value.toLowerCase();
+                var rows = entries.filter(function (e) {
+                    var k = e.Kind || e.kind;
+                    return (!kind || k === kind) && (!text || String(e.Name || e.name).toLowerCase().indexOf(text) >= 0);
+                });
+                var shown = rows.slice(0, 500);
+                var html = '<p class="cs-muted">' + rows.length + ' item(s)' + (rows.length > shown.length ? ', showing the first 500' : '') + '.</p>' +
+                    '<table class="cs-table"><thead><tr><th>Title</th><th>Current</th><th>New</th><th>Why</th></tr></thead><tbody>';
+                shown.forEach(function (e) {
+                    var cands = (e.Candidates || e.candidates || []).join('\n');
+                    var err = e.Error || e.error;
+                    html += '<tr><td>' + esc(e.Name || e.name) + (e.Year || e.year ? ' (' + esc(e.Year || e.year) + ')' : '') +
+                        ((e.IsSeries || e.isSeries) ? ' <span class="cs-muted">series</span>' : '') + '</td>' +
+                        '<td>' + esc(e.Current || e.current || '—') + '</td>' +
+                        '<td>' + esc(e.New || e.new || '') + ((e.Applied || e.applied) ? ' ✓' : '') +
+                        ((e.ChildrenUpdated || e.childrenUpdated) ? ' <span class="cs-muted">+' + esc(e.ChildrenUpdated || e.childrenUpdated) + ' episodes</span>' : '') + '</td>' +
+                        '<td title="' + esc(cands) + '">' + esc(e.Reason || e.reason) + (err ? '<div class="cs-err">' + esc(err) + '</div>' : '') + '</td></tr>';
+                });
+                $('#cs-rows').innerHTML = html + '</tbody></table>';
+            }
+
+            function restoreFromFile(file) {
+                file.text().then(function (body) {
+                    var post = function (apply) {
+                        return ApiClient.ajax({
+                            type: 'POST',
+                            url: ApiClient.getUrl('CommonSense/Restore', { apply: apply }),
+                            data: body,
+                            contentType: 'application/json',
+                            dataType: 'json'
+                        });
+                    };
+                    post(false).then(function (dry) {
+                        var unmatched = dry.Unmatched || dry.unmatched || [];
+                        var changed = dry.Changed || dry.changed || 0;
+                        var summary = changed + ' item(s) would change, ' + (dry.AlreadyCorrect || dry.alreadyCorrect || 0) +
+                            ' already correct, ' + unmatched.length + ' not found in the library.';
+                        if (!changed) { $('#cs-restore-result').innerHTML = '<p>' + esc(summary) + '</p>'; return; }
+                        if (!window.confirm(summary + '\n\nApply these ratings now?')) { return; }
+                        post(true).then(function (done) {
+                            var errors = done.Errors || done.errors || [];
+                            $('#cs-restore-result').innerHTML = '<p>Restored ' + esc(done.Changed || done.changed) + ' rating(s).</p>' +
+                                errors.map(function (e) { return '<p class="cs-err">' + esc(e) + '</p>'; }).join('');
+                        });
+                    }, function () { Dashboard.alert("That file couldn't be read as a ledger."); });
+                });
+            }
+
+            page.addEventListener('pageshow', load);
+            $('#commonSenseConfigForm').addEventListener('submit', save);
+            $('#cs-add-rule').addEventListener('click', function () { addRule(); });
+            $('#cs-preview').addEventListener('click', function () { startTask('CommonSensePreview', 'Preview'); });
+            $('#cs-apply').addEventListener('click', function () {
+                if (window.confirm('Write Custom Ratings to your library now? Every change is recorded in the ledger.')) {
+                    startTask('CommonSenseApply', 'Apply');
+                }
+            });
+            $('#cs-refresh').addEventListener('click', loadReport);
+            $('#cs-clear-cache').addEventListener('click', function () {
+                ApiClient.ajax({ type: 'POST', url: ApiClient.getUrl('CommonSense/ClearCache') }).then(function () {
+                    Dashboard.alert('Source cache cleared.');
+                });
+            });
+            $('#cs-ledger').addEventListener('click', function () { download('CommonSense/Ledger', 'commonsense-ledger.json'); });
+            $('#cs-export').addEventListener('click', function () { download('CommonSense/Export', 'commonsense-export.json'); });
+            $('#cs-restore').addEventListener('click', function () { $('#cs-restore-file').click(); });
+            $('#cs-restore-file').addEventListener('change', function (e) {
+                if (e.target.files.length) { restoreFromFile(e.target.files[0]); }
+                e.target.value = '';
+            });
+        })();
+    </script>
+</div>
+</body>
+</html>

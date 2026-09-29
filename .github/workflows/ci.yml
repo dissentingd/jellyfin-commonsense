@@ -6,16 +6,17 @@ on:
   pull_request:
 
 jobs:
-  test:
+  build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-dotnet@v4
         with:
-          python-version: ${{ matrix.python-version }}
-      - run: pip install -e ".[dev]"
-      - run: ruff check .
-      - run: pytest -v
+          dotnet-version: "10.0.x"
+      - run: dotnet build jellyfin-commonsense.sln -c Release
+      - run: dotnet test jellyfin-commonsense.sln -c Release --no-build
+      - run: dotnet publish Jellyfin.Plugin.CommonSense -c Release --no-build -o out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jellyfin-commonsense
+          path: out/Jellyfin.Plugin.CommonSense.dll
