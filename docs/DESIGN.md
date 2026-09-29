@@ -1,4 +1,4 @@
-# Design notes
+# Design notes — Ratings Fixer
 
 Working design for v0.1. Findings marked **verified** were checked against a real Jellyfin 12.1 server;
 everything else is from the 12.1 API surface and still needs a live check (see *To verify* below).
@@ -26,7 +26,7 @@ The first scaffold was a Python CLI talking to the REST API. It became a server 
   table: `X` enforces as 1000, `M` and `AO` as 18. The plugin scores with the same call the server
   uses, so it agrees with enforcement; the legacy map only applies to strings that truly have no score
   (in practice `GP`, `18+`).
-- **Verified** foreign scores (`/CommonSense/Score`): GB `12A` 12, `15` 15, `18` 18, `R18` 1000;
+- **Verified** foreign scores (`/RatingsFixer/Score`): GB `12A` 12, `15` 15, `18` 18, `R18` 1000;
   DE `12` 12, `16` 16; IE `15A` 15; AU `M` 15, `MA15+` 15; NZ `M` 16, `R16` 16. Note AU/NZ `M` is
   where many US `PG-13` films land, so including AU/NZ pushes those to `R` — see *Open*.
 - **Custom Rating overrides Official Rating for enforcement on 12.1 (verified):** a `G` movie given
@@ -130,8 +130,8 @@ kept and the rest is picked up on a later run.
 
 - **Settings page** (`Configuration/configPage.html`): keys, countries, rules, behaviour, run buttons,
   ledger download/export/restore, and the latest report with filters.
-- **Scheduled tasks** (category *Common Sense*): Preview, Apply, Restore. No default triggers.
-- **API** (admin only, `/CommonSense/...`): `Report`, `Ledger`, `Export`, `Restore?apply=`, `ClearCache`,
+- **Scheduled tasks** (category *Ratings Fixer*): Preview, Apply, Restore. No default triggers.
+- **API** (admin only, `/RatingsFixer/...`): `Report`, `Ledger`, `Export`, `Restore?apply=`, `ClearCache`,
   `Score?rating=&country=` (scores a rating exactly as the server does — for checking mappings).
 - **Auto-rate** (opt-in): movies/series whose metadata was downloaded, and the series of newly added
   episodes, are batched for a minute, then run through Apply. The plugin's own writes use `MetadataEdit`, so they don't re-trigger it.
@@ -146,7 +146,7 @@ kept and the rest is picked up on a later run.
 
 ## Verified on a live server (Jellyfin 12.1, 2026-09-29)
 
-- Foreign certifications score as expected through `/CommonSense/Score`.
+- Foreign certifications score as expected through `/RatingsFixer/Score`.
 - A full Apply plus the enforcement repair: every item carrying one of our Custom Ratings has the
   matching stored score (e.g. `XXX` → 1000, `TV-MA` → 17.1), movies through episodes.
 - A capped user loses an `XXX` movie from search and listings, and an `XXX` series from listings along

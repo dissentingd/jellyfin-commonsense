@@ -13,10 +13,10 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "10.0.x"
-      - run: dotnet build jellyfin-commonsense.sln -c Release
-      - run: dotnet test jellyfin-commonsense.sln -c Release --no-build
-      - run: dotnet publish Jellyfin.Plugin.CommonSense -c Release --no-build -o out
+      - run: dotnet build jellyfin-ratings-fixer.sln -c Release
+      - run: dotnet test jellyfin-ratings-fixer.sln -c Release --no-build
+      - run: dotnet publish Jellyfin.Plugin.RatingsFixer -c Release --no-build -o out
       - uses: actions/upload-artifact@v4
         with:
-          name: jellyfin-commonsense
-          path: out/Jellyfin.Plugin.CommonSense.dll
+          name: jellyfin-ratings-fixer
+          path: out/Jellyfin.Plugin.RatingsFixer.dll

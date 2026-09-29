@@ -1,7 +1,7 @@
-# Metadata for packaging with jprm (https://github.com/oddstr13/jellyfin-plugin-repository-manager).
-name: "Common Sense Ratings"
+# Plugin metadata (jprm-compatible). Releases are published by .github/workflows/release.yml.
+name: "Ratings Fixer"
 guid: "65127be7-01ef-469f-b13b-ecfa1289f5ed"
-version: "0.1.0.0"
+version: "1.0.0.0"
 targetAbi: "12.1.0.0"
 framework: "net10.0"
 owner: "dissentingd"
@@ -12,6 +12,6 @@ description: >
   unrated titles. Raise-only, dry-run first, with a restorable ledger.
 category: "General"
 artifacts:
-  - "Jellyfin.Plugin.CommonSense.dll"
+  - "Jellyfin.Plugin.RatingsFixer.dll"
 changelog: >
-  Initial release.
+  See CHANGELOG.md.

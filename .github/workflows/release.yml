@@ -1,0 +1,63 @@
+name: Release
+
+# Push a tag like v1.0.0 (matching <AssemblyVersion> and a CHANGELOG.md section) to publish:
+# builds and tests, attaches the plugin zip to a GitHub Release, and adds the version to
+# manifest.json on main so Jellyfin's plugin catalog can install it.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Check the tag matches the assembly version
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME#v}"
+          ASM=$(grep -oP '(?<=<AssemblyVersion>)[^<]+' Jellyfin.Plugin.RatingsFixer/Jellyfin.Plugin.RatingsFixer.csproj)
+          [ "$ASM" = "$TAG.0" ] || { echo "Tag $TAG doesn't match AssemblyVersion $ASM"; exit 1; }
+          echo "VERSION=$TAG" >> "$GITHUB_ENV"
+          echo "ASM_VERSION=$ASM" >> "$GITHUB_ENV"
+
+      - run: dotnet test jellyfin-ratings-fixer.sln -c Release
+      - run: dotnet publish Jellyfin.Plugin.RatingsFixer -c Release -o out
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          ZIP="jellyfin-ratings-fixer_${VERSION}.zip"
+          (cd out && zip -j "../$ZIP" Jellyfin.Plugin.RatingsFixer.dll)
+          echo "ZIP=$ZIP" >> "$GITHUB_ENV"
+          echo "MD5=$(md5sum "$ZIP" | cut -d' ' -f1)" >> "$GITHUB_ENV"
+          python .github/scripts/changelog.py "$VERSION" > release-notes.md
+
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "$ZIP" --title "Ratings Fixer $VERSION" --notes-file release-notes.md
+
+      - name: Add the version to manifest.json on main
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git checkout main
+          python .github/scripts/update_manifest.py manifest.json "$ASM_VERSION" \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${ZIP}" \
+            "$MD5" release-notes.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add manifest.json
+          git commit -m "manifest: add ${VERSION}"
+          git push origin main

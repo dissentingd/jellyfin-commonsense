@@ -1,0 +1,12 @@
+[
+  {
+    "guid": "65127be7-01ef-469f-b13b-ecfa1289f5ed",
+    "name": "Ratings Fixer",
+    "description": "Writes stricter Custom Ratings from TMDb certifications, Common Sense Media ages (via MDBList) and your own rules, so Jellyfin's parental controls work on old and unrated titles. Preview first, raise-only by default, with a restorable ledger. Back up your Jellyfin database before the first Apply.",
+    "overview": "Re-rate your library to modern parental-rating standards.",
+    "owner": "dissentingd",
+    "category": "General",
+    "imageUrl": "",
+    "versions": []
+  }
+]
