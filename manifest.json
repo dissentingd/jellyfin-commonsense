@@ -6,7 +6,7 @@
     "overview": "Re-rate your library to modern parental-rating standards.",
     "owner": "dissentingd",
     "category": "General",
-    "imageUrl": "",
+    "imageUrl": "https://raw.githubusercontent.com/dissentingd/jellyfin-ratings-fixer/main/logo.png",
     "versions": [
       {
         "version": "1.3.0.0",

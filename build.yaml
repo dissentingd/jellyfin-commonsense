@@ -11,6 +11,7 @@ description: >
   (via MDBList) and your own rules, so Jellyfin's parental controls work on old and
   unrated titles. Raise-only, dry-run first, with a restorable ledger.
 category: "General"
+imageUrl: "https://raw.githubusercontent.com/dissentingd/jellyfin-ratings-fixer/main/logo.png"
 artifacts:
   - "Jellyfin.Plugin.RatingsFixer.dll"
 changelog: >

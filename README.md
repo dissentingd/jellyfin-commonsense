@@ -1,5 +1,7 @@
 # Ratings Fixer for Jellyfin
 
+![Ratings Fixer](logo.png)
+
 A Jellyfin plugin that re-rates your library to **modern parental-rating standards**, so Jellyfin's
 built-in parental controls actually work on older and unrated titles — and keeps those corrections safe
 from metadata refreshes.
@@ -68,7 +70,7 @@ https://raw.githubusercontent.com/dissentingd/jellyfin-ratings-fixer/main/manife
 then install **Ratings Fixer** from the catalog and restart Jellyfin.
 
 **By hand:** download the zip from [Releases](https://github.com/dissentingd/jellyfin-ratings-fixer/releases),
-unzip `Jellyfin.Plugin.RatingsFixer.dll` into a new folder in Jellyfin's plugin directory
+unzip it (`Jellyfin.Plugin.RatingsFixer.dll` and `logo.png`) into a new folder in Jellyfin's plugin directory
 (e.g. `<config>/data/plugins/Ratings Fixer_<version>/`), and restart Jellyfin.
 
 ## Use

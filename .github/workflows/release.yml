@@ -38,7 +38,7 @@ jobs:
         run: |
           set -euo pipefail
           ZIP="jellyfin-ratings-fixer_${VERSION}.zip"
-          (cd out && zip -j "../$ZIP" Jellyfin.Plugin.RatingsFixer.dll)
+          zip -j "$ZIP" out/Jellyfin.Plugin.RatingsFixer.dll logo.png
           echo "ZIP=$ZIP" >> "$GITHUB_ENV"
           echo "MD5=$(md5sum "$ZIP" | cut -d' ' -f1)" >> "$GITHUB_ENV"
           python .github/scripts/changelog.py "$VERSION" > release-notes.md
