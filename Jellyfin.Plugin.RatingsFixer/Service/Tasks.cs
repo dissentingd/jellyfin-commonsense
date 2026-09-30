@@ -78,7 +78,7 @@ public sealed class RestoreTask(RatingsFixerService service) : IScheduledTask
 
     /// <inheritdoc />
     public Task ExecuteAsync(IProgress<double> progress, CancellationToken cancellationToken) =>
-        service.RestoreAsync([.. RatingLedger.Load(RatingsFixerService.LedgerPath).Entries], apply: true, cancellationToken);
+        service.RestoreAsync([.. RatingLedger.Load(service.LedgerPath).Entries], apply: true, cancellationToken);
 
     /// <inheritdoc />
     public IEnumerable<TaskTriggerInfo> GetDefaultTriggers() => [];

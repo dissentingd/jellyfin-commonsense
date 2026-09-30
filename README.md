@@ -101,6 +101,10 @@ dotnet build jellyfin-ratings-fixer.sln
 dotnet test jellyfin-ratings-fixer.sln
 ```
 
+Tests cover the rating engine and source parsers directly, and the service end to end against an
+in-memory fake of Jellyfin's library (`ServiceTestKit.cs`): what gets written, the enforced score,
+series → episode cascades, the ledger, restore, and auto-rate triggers.
+
 To release: bump `<AssemblyVersion>`, add a `CHANGELOG.md` section, and push a tag like `v1.0.0`. The
 release workflow builds, tests, publishes the zip, and adds the version to `manifest.json`.
 

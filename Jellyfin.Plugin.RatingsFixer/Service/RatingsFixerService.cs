@@ -30,24 +30,27 @@ public sealed class JellyfinRatingScale(ILocalizationManager localization) : IRa
 /// <param name="libraryManager">Library manager.</param>
 /// <param name="scale">Rating scale.</param>
 /// <param name="sources">Rating sources.</param>
+/// <param name="context">The plugin's settings and data folder.</param>
 /// <param name="logger">Logger.</param>
 public sealed class RatingsFixerService(
     ILibraryManager libraryManager,
     IRatingScale scale,
     IEnumerable<IRatingSource> sources,
+    IPluginContext context,
     ILogger<RatingsFixerService> logger)
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
 
-    private static PluginConfiguration Config => Plugin.Instance!.Configuration;
-
-    private static string DataDir => Plugin.Instance!.DataFolderPath;
+    /// <summary>Gets the folder holding the ledger, report and caches.</summary>
+    public string DataDir => context.DataFolderPath;
 
     /// <summary>Gets the path of the last run report.</summary>
-    public static string ReportPath => Path.Combine(DataDir, "report.json");
+    public string ReportPath => Path.Combine(DataDir, "report.json");
 
     /// <summary>Gets the path of the ledger.</summary>
-    public static string LedgerPath => Path.Combine(DataDir, "ledger.json");
+    public string LedgerPath => Path.Combine(DataDir, "ledger.json");
+
+    private PluginConfiguration Config => context.Configuration;
 
     /// <summary>Splits a comma- or newline-separated setting.</summary>
     /// <param name="value">The setting.</param>
@@ -91,7 +94,7 @@ public sealed class RatingsFixerService(
 
     /// <summary>Loads the last saved report.</summary>
     /// <returns>The report, or null.</returns>
-    public static RunReport? LoadReport() =>
+    public RunReport? LoadReport() =>
         File.Exists(ReportPath) ? JsonSerializer.Deserialize<RunReport>(File.ReadAllText(ReportPath), RatingLedger.JsonOptions) : null;
 
     /// <summary>Previews or applies re-rating.</summary>

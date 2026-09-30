@@ -18,6 +18,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
             c.Timeout = TimeSpan.FromSeconds(30);
             c.DefaultRequestHeaders.UserAgent.ParseAdd($"jellyfin-ratings-fixer/{typeof(Plugin).Assembly.GetName().Version}");
         });
+        serviceCollection.AddSingleton<IPluginContext, PluginContext>();
         serviceCollection.AddSingleton<IRatingScale, JellyfinRatingScale>();
         serviceCollection.AddSingleton<IRatingSource, TmdbSource>();
         serviceCollection.AddSingleton<IRatingSource, MdblistSource>();

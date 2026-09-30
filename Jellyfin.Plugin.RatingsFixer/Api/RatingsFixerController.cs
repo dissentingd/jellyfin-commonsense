@@ -23,14 +23,14 @@ public class RatingsFixerController(RatingsFixerService service, IRatingScale sc
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public ActionResult<RunReport> GetReport() =>
-        RatingsFixerService.LoadReport() is { } report ? report : NotFound();
+        service.LoadReport() is { } report ? report : NotFound();
 
     /// <summary>Downloads the ledger.</summary>
     /// <returns>The ledger JSON.</returns>
     [HttpGet("Ledger")]
     [Produces(MediaTypeNames.Application.Json)]
     public ActionResult GetLedger() => JsonFile(
-        RatingLedger.Serialize(RatingLedger.Load(RatingsFixerService.LedgerPath).Entries),
+        RatingLedger.Serialize(RatingLedger.Load(service.LedgerPath).Entries),
         "ratings-fixer-ledger.json");
 
     /// <summary>Downloads every Custom Rating in the library (including hand-set ones) in ledger format.</summary>
@@ -54,7 +54,7 @@ public class RatingsFixerController(RatingsFixerService service, IRatingScale sc
         try
         {
             entries = string.IsNullOrWhiteSpace(body)
-                ? [.. RatingLedger.Load(RatingsFixerService.LedgerPath).Entries]
+                ? [.. RatingLedger.Load(service.LedgerPath).Entries]
                 : RatingLedger.Parse(body);
         }
         catch (System.Text.Json.JsonException ex)
@@ -71,7 +71,7 @@ public class RatingsFixerController(RatingsFixerService service, IRatingScale sc
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public ActionResult ClearCache()
     {
-        var dir = Plugin.Instance!.DataFolderPath;
+        var dir = service.DataDir;
         if (Directory.Exists(dir))
         {
             foreach (var file in Directory.GetFiles(dir, "cache-*.json"))
