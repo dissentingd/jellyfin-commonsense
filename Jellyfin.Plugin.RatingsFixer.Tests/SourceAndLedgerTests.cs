@@ -134,6 +134,36 @@ public class PersistenceTests : IDisposable
     }
 
     [Fact]
+    public void Ledger_KeepsTheOriginalPreviousRating_AcrossRepeatedWrites()
+    {
+        var ledger = RatingLedger.Load(Path.Combine(_dir, "ledger.json"));
+        var id = Guid.NewGuid();
+        ledger.Upsert(new LedgerEntry { ItemId = id, CustomRating = "PG-13", PreviousCustomRating = null, PreviousOfficialRating = "Approved" });
+
+        // A later run raises it again: its "previous" is our own PG-13, which mustn't become the revert target.
+        ledger.Upsert(new LedgerEntry { ItemId = id, CustomRating = "R", PreviousCustomRating = "PG-13", PreviousOfficialRating = "Approved" });
+
+        var entry = ledger.Find(id)!;
+        Assert.Equal(("R", null, "Approved"), (entry.CustomRating, entry.PreviousCustomRating, entry.PreviousOfficialRating));
+    }
+
+    [Fact]
+    public void Exclusions_MatchById_OrBySharedProviderId()
+    {
+        var path = Path.Combine(_dir, "exclusions.json");
+        var list = ExclusionList.Load(path);
+        var id = Guid.NewGuid();
+        list.Add(new ExclusionEntry { ItemId = id, Name = "Film", ProviderIds = { ["Tmdb"] = "42" } });
+        list.Save();
+
+        var reloaded = ExclusionList.Load(path);
+        Assert.True(reloaded.Contains(id, false, new Dictionary<string, string>()));
+        Assert.True(reloaded.Contains(Guid.NewGuid(), false, new Dictionary<string, string> { ["tmdb"] = "42" }));
+        Assert.False(reloaded.Contains(Guid.NewGuid(), true, new Dictionary<string, string> { ["Tmdb"] = "42" })); // a series isn't the movie
+        Assert.True(reloaded.Remove(id));
+    }
+
+    [Fact]
     public void Report_SerializesKindsAsStrings()
     {
         var json = System.Text.Json.JsonSerializer.Serialize(

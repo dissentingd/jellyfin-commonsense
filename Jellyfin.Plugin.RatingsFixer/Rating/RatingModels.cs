@@ -101,6 +101,9 @@ public sealed record ItemSnapshot
     /// <summary>Gets a value indicating whether the user locked the rating field.</summary>
     public bool RatingLocked { get; init; }
 
+    /// <summary>Gets a value indicating whether the user excluded this item from re-rating.</summary>
+    public bool Excluded { get; init; }
+
     /// <summary>Gets a value indicating whether the current custom rating was written by this plugin.</summary>
     public bool CustomRatingIsOurs { get; init; }
 

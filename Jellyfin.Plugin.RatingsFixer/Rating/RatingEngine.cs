@@ -129,6 +129,11 @@ public sealed class RatingEngine
             Candidates = candidates ?? [],
         };
 
+        if (item.Excluded)
+        {
+            return Make(DecisionKind.Skip, "you excluded this title from re-rating (when reverting its rating)");
+        }
+
         if (_options.RespectLockedRating && item.RatingLocked)
         {
             return Make(DecisionKind.Skip, "rating field is locked");

@@ -186,11 +186,15 @@ internal sealed class FakeSource(string name) : IRatingSource
 
     public List<Guid> Asked { get; } = [];
 
+    /// <summary>Gets the cache age the last run allowed (zero means "ask afresh").</summary>
+    public TimeSpan? LastMaxAge { get; private set; }
+
     public void Answer(BaseItem item, params RawRating[] ratings) => Answers[item.Id] = [.. ratings];
 
     public Task<Dictionary<Guid, List<RawRating>>> FetchAsync(IReadOnlyList<ItemSnapshot> items, SourceRun run, IProgress<double>? progress, CancellationToken cancellationToken)
     {
         Asked.AddRange(items.Select(i => i.Id));
+        LastMaxAge = run.MaxAge;
         return Task.FromResult(items.Where(i => Answers.ContainsKey(i.Id)).ToDictionary(i => i.Id, i => Answers[i.Id]));
     }
 }

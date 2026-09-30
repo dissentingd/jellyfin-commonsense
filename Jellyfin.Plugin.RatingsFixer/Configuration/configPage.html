@@ -149,6 +149,36 @@
                     <button is="emby-button" type="button" class="raised" id="cs-refresh"><span>Refresh report</span></button>
                     <button is="emby-button" type="button" class="raised" id="cs-clear-cache"><span>Clear source cache</span></button>
                 </div>
+                <div class="cs-actions">
+                    <button is="emby-button" type="button" class="raised" id="cs-recheck"><span>Re-check review list</span></button>
+                    <div class="checkboxContainer" style="margin:0"><label><input is="emby-checkbox" type="checkbox" id="cs-recheck-apply" /><span>and write the ratings it finds</span></label></div>
+                </div>
+                <p class="cs-muted">Re-check asks the sources afresh (skipping the cache) about just the titles on the report's review list — useful after adding a source or key, or when sources may have added ratings since.</p>
+                <div id="cs-recheck-result"></div>
+            </div>
+
+            <div class="verticalSection">
+                <h3 class="sectionTitle">Written ratings</h3>
+                <p class="cs-muted">Every rating this plugin has written. Tick titles to revert them to what they had before
+                    (usually no custom rating); a series' seasons and episodes go back too. Search by title, rating or reason —
+                    e.g. <code>rule: collection</code> finds everything a collection rule wrote.</p>
+                <div class="cs-filters">
+                    <div class="inputContainer" style="margin:0"><input is="emby-input" type="search" id="cs-ledger-filter" label="Search" /></div>
+                </div>
+                <div class="cs-actions">
+                    <button is="emby-button" type="button" class="raised" id="cs-ledger-select-all"><span>Select all matching</span></button>
+                    <button is="emby-button" type="button" class="raised" id="cs-ledger-select-none"><span>Clear selection</span></button>
+                    <button is="emby-button" type="button" class="raised" id="cs-revert"><span>Revert selected…</span></button>
+                    <div class="checkboxContainer" style="margin:0"><label><input is="emby-checkbox" type="checkbox" id="cs-revert-exclude" checked /><span>Don't re-rate these titles</span></label></div>
+                </div>
+                <div id="cs-ledger-rows"><p class="cs-muted">Loading…</p></div>
+                <div id="cs-revert-result"></div>
+            </div>
+
+            <div class="verticalSection">
+                <h3 class="sectionTitle">Excluded titles</h3>
+                <p class="cs-muted">Titles you reverted and asked the plugin to leave alone. Include one again to let the next run rate it.</p>
+                <div id="cs-exclusions"><p class="cs-muted">Loading…</p></div>
             </div>
 
             <div class="verticalSection">
@@ -307,6 +337,121 @@
                 $('#SeriesLadder').value = preset.Series || preset.series;
             }
 
+            var ledgerEntries = [];
+            var selected = {};
+
+            function prop(o, k) { return o[k] !== undefined ? o[k] : o[k.charAt(0).toLowerCase() + k.slice(1)]; }
+
+            function loadLedger() {
+                ApiClient.ajax({ type: 'GET', url: ApiClient.getUrl('RatingsFixer/LedgerEntries'), dataType: 'json' }).then(function (entries) {
+                    ledgerEntries = entries || [];
+                    selected = {};
+                    renderLedger();
+                });
+            }
+
+            function ledgerMatches() {
+                var text = $('#cs-ledger-filter').value.toLowerCase();
+                return ledgerEntries.filter(function (e) {
+                    if (!text) { return true; }
+                    return [prop(e, 'Name'), prop(e, 'CustomRating'), prop(e, 'Reason'), String(prop(e, 'Year') || '')]
+                        .join(' ').toLowerCase().indexOf(text) >= 0;
+                });
+            }
+
+            function renderLedger() {
+                var rows = ledgerMatches();
+                var shown = rows.slice(0, 300);
+                var count = Object.keys(selected).length;
+                var html = '<p class="cs-muted">' + rows.length + ' of ' + ledgerEntries.length + ' written rating(s) match' +
+                    (rows.length > shown.length ? ', showing the first 300' : '') + '. <b>' + count + ' selected.</b></p>' +
+                    '<table class="cs-table"><thead><tr><th></th><th>Title</th><th>Rating</th><th>Before</th><th>Why</th></tr></thead><tbody>';
+                shown.forEach(function (e) {
+                    var id = prop(e, 'ItemId');
+                    html += '<tr><td><input type="checkbox" class="cs-ledger-pick" data-id="' + esc(id) + '"' + (selected[id] ? ' checked' : '') + ' /></td>' +
+                        '<td>' + esc(prop(e, 'Name')) + (prop(e, 'Year') ? ' (' + esc(prop(e, 'Year')) + ')' : '') + (prop(e, 'IsSeries') ? ' <span class="cs-muted">series</span>' : '') + '</td>' +
+                        '<td>' + esc(prop(e, 'CustomRating')) + '</td>' +
+                        '<td>' + esc(prop(e, 'PreviousCustomRating') || prop(e, 'PreviousOfficialRating') || '—') + '</td>' +
+                        '<td>' + esc(prop(e, 'Reason')) + '</td></tr>';
+                });
+                $('#cs-ledger-rows').innerHTML = html + '</tbody></table>';
+                Array.prototype.forEach.call(page.querySelectorAll('.cs-ledger-pick'), function (box) {
+                    box.addEventListener('change', function () {
+                        if (box.checked) { selected[box.getAttribute('data-id')] = true; } else { delete selected[box.getAttribute('data-id')]; }
+                        renderLedger();
+                    });
+                });
+            }
+
+            function revertSelected() {
+                var ids = Object.keys(selected);
+                if (!ids.length) { Dashboard.alert('Tick the titles to revert first.'); return; }
+                var exclude = $('#cs-revert-exclude').checked;
+                var post = function (apply) {
+                    return ApiClient.ajax({
+                        type: 'POST',
+                        url: ApiClient.getUrl('RatingsFixer/Revert', { apply: apply, exclude: exclude }),
+                        data: JSON.stringify(ids),
+                        contentType: 'application/json',
+                        dataType: 'json'
+                    });
+                };
+                post(false).then(function (dry) {
+                    var changed = prop(dry, 'ChangedSince') || [];
+                    var missing = prop(dry, 'NotFound') || [];
+                    var summary = prop(dry, 'Reverted') + ' title(s) and ' + prop(dry, 'ChildrenReverted') + ' season(s)/episode(s) would go back to their earlier rating.';
+                    if (changed.length) { summary += '\n' + changed.length + ' changed by someone else since, so left alone.'; }
+                    if (missing.length) { summary += '\n' + missing.length + ' no longer in the library.'; }
+                    if (!prop(dry, 'Reverted')) { Dashboard.alert(summary); return; }
+                    summary += exclude ? '\n\nThey will be excluded from future runs.' : '\n\nThe next Apply may rate them again.';
+                    if (!window.confirm(summary + '\n\nRevert now?')) { return; }
+                    post(true).then(function (done) {
+                        var errors = prop(done, 'Errors') || [];
+                        $('#cs-revert-result').innerHTML = '<p>Reverted ' + esc(prop(done, 'Reverted')) + ' title(s) and ' + esc(prop(done, 'ChildrenReverted')) + ' season(s)/episode(s).</p>' +
+                            errors.map(function (e) { return '<p class="cs-err">' + esc(e) + '</p>'; }).join('');
+                        loadLedger();
+                        loadExclusions();
+                    });
+                });
+            }
+
+            function loadExclusions() {
+                ApiClient.ajax({ type: 'GET', url: ApiClient.getUrl('RatingsFixer/Exclusions'), dataType: 'json' }).then(function (entries) {
+                    entries = entries || [];
+                    if (!entries.length) { $('#cs-exclusions').innerHTML = '<p class="cs-muted">None.</p>'; return; }
+                    $('#cs-exclusions').innerHTML = '<table class="cs-table"><thead><tr><th>Title</th><th>Reverted rating</th><th></th></tr></thead><tbody>' +
+                        entries.map(function (e) {
+                            return '<tr><td>' + esc(prop(e, 'Name')) + (prop(e, 'Year') ? ' (' + esc(prop(e, 'Year')) + ')' : '') + '</td><td>' + esc(prop(e, 'RevertedRating') || '') +
+                                '</td><td><button is="emby-button" type="button" class="raised cs-include" data-id="' + esc(prop(e, 'ItemId')) + '"><span>Include again</span></button></td></tr>';
+                        }).join('') + '</tbody></table>';
+                    Array.prototype.forEach.call(page.querySelectorAll('.cs-include'), function (button) {
+                        button.addEventListener('click', function () {
+                            ApiClient.ajax({
+                                type: 'POST',
+                                url: ApiClient.getUrl('RatingsFixer/Exclusions/Remove'),
+                                data: JSON.stringify([button.getAttribute('data-id')]),
+                                contentType: 'application/json',
+                                dataType: 'json'
+                            }).then(loadExclusions);
+                        });
+                    });
+                });
+            }
+
+            function recheckReview() {
+                var apply = $('#cs-recheck-apply').checked;
+                if (apply && !window.confirm('Re-check the review list and write any ratings found?')) { return; }
+                $('#cs-recheck-result').innerHTML = '<p class="cs-muted">Re-checking… this asks the sources about every title on the review list and can take a few minutes.</p>';
+                ApiClient.ajax({ type: 'POST', url: ApiClient.getUrl('RatingsFixer/RecheckReview', { apply: apply }), dataType: 'json' }).then(function (r) {
+                    var counts = prop(r, 'Counts') || {};
+                    $('#cs-recheck-result').innerHTML = '<p>Re-checked ' + esc(prop(r, 'ItemsScanned') || 0) + ' title(s): ' + esc(counts.Raise || 0) + ' now have a rating' +
+                        (apply ? ' (written)' : ' (not written yet — tick the box above, or run Apply)') + ', ' + esc(counts.Review || 0) + ' still need review.</p>';
+                    loadReport();
+                }, function () {
+                    $('#cs-recheck-result').innerHTML = '<p class="cs-err">No report yet — run a preview first.</p>';
+                });
+            }
+
             function loadReport() {
                 ApiClient.ajax({ type: 'GET', url: ApiClient.getUrl('RatingsFixer/Report'), dataType: 'json' }).then(function (r) {
                     report = r;
@@ -393,9 +538,19 @@
             }
 
             page.addEventListener('pageshow', load);
+            page.addEventListener('pageshow', loadLedger);
+            page.addEventListener('pageshow', loadExclusions);
             $('#ratingsFixerConfigForm').addEventListener('submit', save);
             $('#cs-add-rule').addEventListener('click', function () { addRule(); });
             $('#cs-preset').addEventListener('change', applyPreset);
+            $('#cs-ledger-filter').addEventListener('input', renderLedger);
+            $('#cs-ledger-select-all').addEventListener('click', function () {
+                ledgerMatches().forEach(function (e) { selected[prop(e, 'ItemId')] = true; });
+                renderLedger();
+            });
+            $('#cs-ledger-select-none').addEventListener('click', function () { selected = {}; renderLedger(); });
+            $('#cs-revert').addEventListener('click', revertSelected);
+            $('#cs-recheck').addEventListener('click', recheckReview);
             $('#cs-preview').addEventListener('click', function () { startTask('RatingsFixerPreview', 'Preview'); });
             $('#cs-apply').addEventListener('click', function () {
                 if (window.confirm('Write Custom Ratings to your library now?\n\nHave you backed up Jellyfin\'s database? Every change is recorded in the ledger, but only a backup can undo an Apply.')) {

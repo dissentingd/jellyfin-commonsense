@@ -52,6 +52,9 @@ public sealed class RatingsFixerService(
     /// <summary>Gets the path of the ledger.</summary>
     public string LedgerPath => Path.Combine(DataDir, "ledger.json");
 
+    /// <summary>Gets the path of the list of titles excluded from re-rating.</summary>
+    public string ExclusionsPath => Path.Combine(DataDir, "exclusions.json");
+
     private PluginConfiguration Config => context.Configuration;
 
     /// <summary>Splits a comma- or newline-separated setting.</summary>
@@ -105,13 +108,14 @@ public sealed class RatingsFixerService(
     /// <param name="saveReport">Whether to save this run as the latest report.</param>
     /// <param name="progress">Progress, 0–100.</param>
     /// <param name="cancellationToken">Cancellation.</param>
+    /// <param name="refreshSources">Ask the sources again instead of using cached answers.</param>
     /// <returns>The report.</returns>
-    public async Task<RunReport> RunAsync(bool apply, IReadOnlyCollection<Guid>? onlyItems, bool saveReport, IProgress<double>? progress, CancellationToken cancellationToken)
+    public async Task<RunReport> RunAsync(bool apply, IReadOnlyCollection<Guid>? onlyItems, bool saveReport, IProgress<double>? progress, CancellationToken cancellationToken, bool refreshSources = false)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            return await RunCoreAsync(apply, onlyItems, saveReport, progress, cancellationToken).ConfigureAwait(false);
+            return await RunCoreAsync(apply, onlyItems, saveReport, progress, cancellationToken, refreshSources).ConfigureAwait(false);
         }
         finally
         {
@@ -130,26 +134,13 @@ public sealed class RatingsFixerService(
         try
         {
             var report = new RestoreReport { Applied = apply, Entries = entries.Count };
-            var items = LoadItems(null, allLibraries: true);
-            var byId = items.ToDictionary(i => i.Id);
-            var byProvider = new Dictionary<string, BaseItem>(StringComparer.OrdinalIgnoreCase);
-            foreach (var item in items)
-            {
-                foreach (var (provider, id) in item.ProviderIds)
-                {
-                    if (!string.IsNullOrWhiteSpace(id))
-                    {
-                        byProvider.TryAdd($"{(item is Series ? "s" : "m")}:{provider}:{id}", item);
-                    }
-                }
-            }
+            var index = new ItemIndex(LoadItems(null, allLibraries: true));
 
             var ledger = RatingLedger.Load(LedgerPath);
             foreach (var entry in entries)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var item = byId.GetValueOrDefault(entry.ItemId)
-                    ?? entry.ProviderIds.Select(p => byProvider.GetValueOrDefault($"{(entry.IsSeries ? "s" : "m")}:{p.Key}:{p.Value}")).FirstOrDefault(i => i is not null);
+                var item = index.Find(entry.ItemId, entry.IsSeries, entry.ProviderIds);
                 if (item is null)
                 {
                     report.Unmatched.Add($"{entry.Name} ({entry.Year})");
@@ -205,7 +196,164 @@ public sealed class RatingsFixerService(
             .Select(i => ToLedgerEntry(i, null, i.CustomRating!, "export"))
             .ToList();
 
-    private async Task<RunReport> RunCoreAsync(bool apply, IReadOnlyCollection<Guid>? onlyItems, bool saveReport, IProgress<double>? progress, CancellationToken ct)
+    /// <summary>
+    /// Undoes ratings the plugin wrote: each item goes back to the custom rating it had before the plugin
+    /// first touched it (usually none), and a series' seasons and episodes that carry its rating go back
+    /// too. Items whose rating was changed by someone else since are left alone.
+    /// </summary>
+    /// <param name="itemIds">Ledger item ids to revert.</param>
+    /// <param name="apply">Whether to write; false just reports what would happen.</param>
+    /// <param name="exclude">Whether to exclude the reverted titles from future runs.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>The report.</returns>
+    public async Task<RevertReport> RevertAsync(IReadOnlyCollection<Guid> itemIds, bool apply, bool exclude, CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var report = new RevertReport { Applied = apply, Requested = itemIds.Count };
+            var ledger = RatingLedger.Load(LedgerPath);
+            var exclusions = ExclusionList.Load(ExclusionsPath);
+            var index = new ItemIndex(LoadItems(null, allLibraries: true));
+            foreach (var id in itemIds.Distinct())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (ledger.Find(id) is not { } entry)
+                {
+                    report.NotInLedger++;
+                    continue;
+                }
+
+                var label = entry.Year is null ? entry.Name : $"{entry.Name} ({entry.Year})";
+                var item = index.Find(entry.ItemId, entry.IsSeries, entry.ProviderIds);
+                if (item is null)
+                {
+                    report.NotFound.Add(label);
+                    continue;
+                }
+
+                if (!string.Equals(item.CustomRating, entry.CustomRating, StringComparison.Ordinal))
+                {
+                    report.ChangedSince.Add($"{label}: now \"{item.CustomRating}\", not \"{entry.CustomRating}\"");
+                    continue;
+                }
+
+                var previous = string.IsNullOrWhiteSpace(entry.PreviousCustomRating) ? null : entry.PreviousCustomRating;
+                report.Reverted++;
+                if (item is Series)
+                {
+                    report.ChildrenReverted += await RevertChildrenAsync(item, entry.CustomRating, previous, apply, cancellationToken).ConfigureAwait(false);
+                }
+
+                if (!apply)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    await WriteAsync(item, previous, cancellationToken).ConfigureAwait(false);
+                    ledger.Remove(entry.ItemId);
+                    if (exclude)
+                    {
+                        exclusions.Add(new ExclusionEntry
+                        {
+                            ItemId = item.Id,
+                            Name = item.Name ?? entry.Name,
+                            Year = item.ProductionYear,
+                            IsSeries = item is Series,
+                            ProviderIds = new Dictionary<string, string>(item.ProviderIds.Where(p => !string.IsNullOrWhiteSpace(p.Value)), StringComparer.OrdinalIgnoreCase),
+                            RevertedRating = entry.CustomRating,
+                            Added = DateTime.UtcNow,
+                        });
+                        report.Excluded++;
+                    }
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    report.Reverted--;
+                    report.Errors.Add($"{label}: {ex.Message}");
+                }
+            }
+
+            if (apply)
+            {
+                ledger.Save();
+                exclusions.Save();
+            }
+
+            logger.LogInformation(
+                "Ratings Fixer revert{Mode}: {Reverted} of {Requested} reverted, {Children} seasons/episodes, {Excluded} excluded",
+                apply ? string.Empty : " (preview)",
+                report.Reverted,
+                report.Requested,
+                report.ChildrenReverted,
+                report.Excluded);
+            return report;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Re-checks only the titles on the latest report's review list, asking the sources afresh (bypassing the
+    /// cache), and folds the result back into the saved report.
+    /// </summary>
+    /// <param name="apply">Whether to write changes.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>The re-check's own report, or null when there's no saved report.</returns>
+    public async Task<RunReport?> RecheckReviewAsync(bool apply, CancellationToken cancellationToken)
+    {
+        var saved = LoadReport();
+        if (saved is null)
+        {
+            return null;
+        }
+
+        var ids = saved.Entries.Where(e => e.Kind == DecisionKind.Review).Select(e => e.ItemId).ToHashSet();
+        if (ids.Count == 0)
+        {
+            return new RunReport { Applied = apply, Started = DateTime.UtcNow, Finished = DateTime.UtcNow };
+        }
+
+        var recheck = await RunAsync(apply, ids, saveReport: false, progress: null, cancellationToken, refreshSources: true).ConfigureAwait(false);
+
+        // Fold into the saved report: the old review entries are replaced by whatever the re-check decided.
+        saved.Entries = [.. saved.Entries.Where(e => !ids.Contains(e.ItemId)), .. recheck.Entries];
+        foreach (var kind in Enum.GetValues<DecisionKind>().Select(k => k.ToString()))
+        {
+            var before = saved.Counts.GetValueOrDefault(kind) - (kind == nameof(DecisionKind.Review) ? ids.Count : 0);
+            saved.Counts[kind] = Math.Max(0, before) + recheck.Counts.GetValueOrDefault(kind);
+        }
+
+        saved.Applied |= apply;
+        saved.Finished = recheck.Finished;
+        saved.ChildrenUpdated += recheck.ChildrenUpdated;
+        saved.Warnings = [.. saved.Warnings, .. recheck.Warnings.Select(w => "Review re-check: " + w)];
+        Directory.CreateDirectory(DataDir);
+        await File.WriteAllTextAsync(ReportPath, JsonSerializer.Serialize(saved, RatingLedger.JsonOptions), cancellationToken).ConfigureAwait(false);
+        return recheck;
+    }
+
+    /// <summary>Gets the titles excluded from re-rating.</summary>
+    /// <returns>The entries.</returns>
+    public List<ExclusionEntry> GetExclusions() =>
+        [.. ExclusionList.Load(ExclusionsPath).Entries.OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase)];
+
+    /// <summary>Lets excluded titles be re-rated again by the next run.</summary>
+    /// <param name="itemIds">Item ids.</param>
+    /// <returns>How many were removed from the exclusion list.</returns>
+    public int IncludeAgain(IReadOnlyCollection<Guid> itemIds)
+    {
+        var exclusions = ExclusionList.Load(ExclusionsPath);
+        var removed = itemIds.Count(exclusions.Remove);
+        exclusions.Save();
+        return removed;
+    }
+
+    private async Task<RunReport> RunCoreAsync(bool apply, IReadOnlyCollection<Guid>? onlyItems, bool saveReport, IProgress<double>? progress, CancellationToken ct, bool refreshSources = false)
     {
         var config = Config;
         var report = new RunReport { Applied = apply, Started = DateTime.UtcNow };
@@ -216,9 +364,10 @@ public sealed class RatingsFixerService(
         }
 
         var ledger = RatingLedger.Load(LedgerPath);
+        var exclusions = ExclusionList.Load(ExclusionsPath);
         var items = LoadItems(onlyItems);
         report.ItemsScanned = items.Count;
-        var snapshots = items.ToDictionary(i => i.Id, i => Snapshot(i, ledger));
+        var snapshots = items.ToDictionary(i => i.Id, i => Snapshot(i, ledger, exclusions));
         progress?.Report(2);
 
         // 1. User rules.
@@ -226,7 +375,7 @@ public sealed class RatingsFixerService(
 
         // 2. Sources, for items no rule decided and that we might change.
         var needSources = snapshots.Values.Where(s => !ruleHits.ContainsKey(s.Id) && !WillSkip(s, config)).ToList();
-        var raw = await FetchSourcesAsync(config, needSources, report.Warnings, progress, ct).ConfigureAwait(false);
+        var raw = await FetchSourcesAsync(config, needSources, report.Warnings, progress, ct, refreshSources).ConfigureAwait(false);
         progress?.Report(80);
 
         // 3. Decide, and write.
@@ -337,10 +486,11 @@ public sealed class RatingsFixerService(
     }
 
     private static bool WillSkip(ItemSnapshot s, PluginConfiguration config) =>
-        (config.RespectLockedRating && s.RatingLocked)
+        s.Excluded
+        || (config.RespectLockedRating && s.RatingLocked)
         || (config.RespectManualCustomRating && !string.IsNullOrWhiteSpace(s.CustomRating) && !s.CustomRatingIsOurs);
 
-    private static ItemSnapshot Snapshot(BaseItem item, RatingLedger ledger)
+    private static ItemSnapshot Snapshot(BaseItem item, RatingLedger ledger, ExclusionList exclusions)
     {
         var ours = ledger.Find(item.Id);
         return new ItemSnapshot
@@ -354,6 +504,7 @@ public sealed class RatingsFixerService(
             ProviderIds = new Dictionary<string, string>(item.ProviderIds, StringComparer.OrdinalIgnoreCase),
             RatingLocked = item.LockedFields.Contains(MetadataField.OfficialRating),
             CustomRatingIsOurs = ours is not null && string.Equals(ours.CustomRating, item.CustomRating, StringComparison.Ordinal),
+            Excluded = exclusions.Contains(item.Id, item is Series, item.ProviderIds),
         };
     }
 
@@ -472,7 +623,7 @@ public sealed class RatingsFixerService(
         return items.Where(i => memberIds.Contains(i.Id));
     }
 
-    private async Task<Dictionary<Guid, List<RawRating>>> FetchSourcesAsync(PluginConfiguration config, List<ItemSnapshot> items, List<string> warnings, IProgress<double>? progress, CancellationToken ct)
+    private async Task<Dictionary<Guid, List<RawRating>>> FetchSourcesAsync(PluginConfiguration config, List<ItemSnapshot> items, List<string> warnings, IProgress<double>? progress, CancellationToken ct, bool refresh = false)
     {
         var merged = new Dictionary<Guid, List<RawRating>>();
         var tmdbKey = config.TmdbApiKey.Trim();
@@ -489,7 +640,8 @@ public sealed class RatingsFixerService(
             return merged;
         }
 
-        var maxAge = TimeSpan.FromDays(Math.Max(0, config.CacheDays));
+        // A refresh treats every cached answer (and every cached "not found" id lookup) as stale.
+        var maxAge = refresh ? TimeSpan.Zero : TimeSpan.FromDays(Math.Max(0, config.CacheDays));
         items = await ResolveTmdbIdsAsync(items, tmdbKey, maxAge, warnings, ct).ConfigureAwait(false);
         var withoutTmdb = items.Count(i => i.TmdbId is null);
         if (withoutTmdb > 0)
@@ -642,6 +794,36 @@ public sealed class RatingsFixerService(
     }
 
     /// <summary>
+    /// Puts back a series' seasons and episodes that carry the rating being reverted. The cascade only ever
+    /// wrote children that had no custom rating or the series' previous one, so both go back to that.
+    /// </summary>
+    /// <returns>How many children were (or, in a preview, would be) reverted.</returns>
+    private async Task<int> RevertChildrenAsync(BaseItem series, string rating, string? previous, bool apply, CancellationToken ct)
+    {
+        var children = libraryManager.GetItemList(new InternalItemsQuery
+        {
+            AncestorIds = [series.Id],
+            IncludeItemTypes = [BaseItemKind.Season, BaseItemKind.Episode],
+            Recursive = true,
+        }).Where(c => string.Equals(c.CustomRating, rating, StringComparison.Ordinal)).ToList();
+
+        if (apply)
+        {
+            foreach (var chunk in children.Chunk(100))
+            {
+                foreach (var child in chunk)
+                {
+                    SetRating(child, previous);
+                }
+
+                await libraryManager.UpdateItemsAsync(chunk, series, ItemUpdateType.MetadataEdit, ct).ConfigureAwait(false);
+            }
+        }
+
+        return children.Count;
+    }
+
+    /// <summary>
     /// Whether the score Jellyfin actually filters on (<c>InheritedParentalRatingValue</c>) is out of
     /// step with the item's rating. The metadata editor recomputes it on save; a plain
     /// <c>UpdateItemAsync</c> doesn't, so a Custom Rating written without it isn't enforced at all.
@@ -653,7 +835,7 @@ public sealed class RatingsFixerService(
             || (item.InheritedParentalRatingSubValue ?? 0) != (score?.SubScore ?? 0);
     }
 
-    private static void SetRating(BaseItem item, string rating)
+    private static void SetRating(BaseItem item, string? rating)
     {
         item.CustomRating = rating;
         var score = item.GetParentalRatingScore();
@@ -661,9 +843,37 @@ public sealed class RatingsFixerService(
         item.InheritedParentalRatingSubValue = score?.SubScore;
     }
 
-    private async Task WriteAsync(BaseItem item, string rating, CancellationToken ct)
+    private async Task WriteAsync(BaseItem item, string? rating, CancellationToken ct)
     {
         SetRating(item, rating);
         await libraryManager.UpdateItemAsync(item, item.GetParent(), ItemUpdateType.MetadataEdit, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Finds library items by id, then by provider id (so ledger entries survive re-scans and restores).</summary>
+    private sealed class ItemIndex
+    {
+        private readonly Dictionary<Guid, BaseItem> _byId;
+        private readonly Dictionary<string, BaseItem> _byProvider = new(StringComparer.OrdinalIgnoreCase);
+
+        public ItemIndex(IReadOnlyCollection<BaseItem> items)
+        {
+            _byId = items.ToDictionary(i => i.Id);
+            foreach (var item in items)
+            {
+                foreach (var (provider, id) in item.ProviderIds)
+                {
+                    if (!string.IsNullOrWhiteSpace(id))
+                    {
+                        _byProvider.TryAdd(Key(item is Series, provider, id), item);
+                    }
+                }
+            }
+        }
+
+        public BaseItem? Find(Guid itemId, bool isSeries, IReadOnlyDictionary<string, string> providerIds) =>
+            _byId.GetValueOrDefault(itemId)
+            ?? providerIds.Select(p => _byProvider.GetValueOrDefault(Key(isSeries, p.Key, p.Value))).FirstOrDefault(i => i is not null);
+
+        private static string Key(bool isSeries, string provider, string id) => $"{(isSeries ? "s" : "m")}:{provider}:{id}";
     }
 }

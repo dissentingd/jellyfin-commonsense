@@ -68,6 +68,41 @@ public class RatingsFixerController(RatingsFixerService service, IRatingScale sc
         return await service.RestoreAsync(entries, apply, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Gets every rating the plugin has written (the ledger), for browsing and reverting.</summary>
+    /// <returns>The entries, newest first.</returns>
+    [HttpGet("LedgerEntries")]
+    public ActionResult<IEnumerable<LedgerEntry>> LedgerEntries() =>
+        RatingLedger.Load(service.LedgerPath).Entries.OrderByDescending(e => e.Timestamp).ToList();
+
+    /// <summary>Reverts ratings the plugin wrote.</summary>
+    /// <param name="itemIds">Item ids from the ledger.</param>
+    /// <param name="apply">Whether to write; false just reports what would happen.</param>
+    /// <param name="exclude">Whether to exclude the reverted titles from future runs.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>The revert report.</returns>
+    [HttpPost("Revert")]
+    public async Task<ActionResult<RevertReport>> Revert([FromBody] Guid[] itemIds, [FromQuery] bool apply, [FromQuery] bool exclude, CancellationToken cancellationToken) =>
+        await service.RevertAsync(itemIds, apply, exclude, cancellationToken).ConfigureAwait(false);
+
+    /// <summary>Gets the titles excluded from re-rating.</summary>
+    /// <returns>The exclusions.</returns>
+    [HttpGet("Exclusions")]
+    public ActionResult<IEnumerable<ExclusionEntry>> Exclusions() => service.GetExclusions();
+
+    /// <summary>Lets excluded titles be re-rated again.</summary>
+    /// <param name="itemIds">Item ids.</param>
+    /// <returns>How many were included again.</returns>
+    [HttpPost("Exclusions/Remove")]
+    public ActionResult<int> IncludeAgain([FromBody] Guid[] itemIds) => service.IncludeAgain(itemIds);
+
+    /// <summary>Re-checks just the latest report's review list, asking the sources afresh.</summary>
+    /// <param name="apply">Whether to write changes.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>The re-check's report, or 404 when there's no report yet.</returns>
+    [HttpPost("RecheckReview")]
+    public async Task<ActionResult<RunReport>> RecheckReview([FromQuery] bool apply, CancellationToken cancellationToken) =>
+        await service.RecheckReviewAsync(apply, cancellationToken).ConfigureAwait(false) is { } report ? report : NotFound();
+
     /// <summary>Deletes cached source lookups, so the next run asks the sources again.</summary>
     /// <returns>No content.</returns>
     [HttpPost("ClearCache")]

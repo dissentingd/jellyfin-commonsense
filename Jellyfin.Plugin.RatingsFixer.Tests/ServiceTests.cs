@@ -382,6 +382,179 @@ public class SeriesTests : ServiceTestBase
 }
 
 [Collection(JellyfinStaticsCollection.Name)]
+public class RevertTests : ServiceTestBase
+{
+    private async Task<Movie> RatedMovieAsync()
+    {
+        var movie = Library.AddMovie("Old Film", official: "Approved");
+        Tmdb.Answer(movie, Cert("DE", "16"));
+        await ApplyAsync();
+        Assert.Equal("R", movie.CustomRating);
+        return movie;
+    }
+
+    [Fact]
+    public async Task Revert_PutsTheItemBack_AndExcludesIt()
+    {
+        var movie = await RatedMovieAsync();
+
+        var report = await Service.RevertAsync([movie.Id], apply: true, exclude: true, CancellationToken.None);
+
+        Assert.Equal((1, 1), (report.Reverted, report.Excluded));
+        Assert.Null(movie.CustomRating);
+        Assert.Equal(0, movie.InheritedParentalRatingValue); // enforced as its official "Approved" again
+        Assert.Empty(RatingLedger.Load(Service.LedgerPath).Entries);
+
+        var next = await ApplyAsync();
+        Assert.Equal(1, next.Counts["Skip"]);
+        Assert.Null(movie.CustomRating);
+
+        Assert.Equal(1, Service.IncludeAgain([movie.Id]));
+        await ApplyAsync();
+        Assert.Equal("R", movie.CustomRating);
+    }
+
+    [Fact]
+    public async Task Revert_WithoutExcluding_LetsTheNextRunRateItAgain()
+    {
+        var movie = await RatedMovieAsync();
+
+        await Service.RevertAsync([movie.Id], apply: true, exclude: false, CancellationToken.None);
+        Assert.Null(movie.CustomRating);
+        Assert.Empty(Service.GetExclusions());
+
+        await ApplyAsync();
+        Assert.Equal("R", movie.CustomRating);
+    }
+
+    [Fact]
+    public async Task RevertPreview_WritesNothing()
+    {
+        var movie = await RatedMovieAsync();
+        var savesBefore = Library.Saved.Count;
+
+        var report = await Service.RevertAsync([movie.Id], apply: false, exclude: true, CancellationToken.None);
+
+        Assert.Equal(1, report.Reverted);
+        Assert.Equal("R", movie.CustomRating);
+        Assert.Equal(savesBefore, Library.Saved.Count);
+        Assert.Single(RatingLedger.Load(Service.LedgerPath).Entries);
+        Assert.Empty(Service.GetExclusions());
+    }
+
+    [Fact]
+    public async Task Revert_LeavesRatingsSomeoneChangedSince()
+    {
+        var movie = await RatedMovieAsync();
+        movie.CustomRating = "PG-13"; // edited by hand after the plugin wrote R
+
+        var report = await Service.RevertAsync([movie.Id], apply: true, exclude: true, CancellationToken.None);
+
+        Assert.Equal(0, report.Reverted);
+        Assert.Single(report.ChangedSince);
+        Assert.Equal("PG-13", movie.CustomRating);
+    }
+
+    [Fact]
+    public async Task Revert_GoesBackToTheOriginalRating_NotAnEarlierPluginWrite()
+    {
+        var movie = Library.AddMovie("Old Film", official: "Approved");
+        Tmdb.Answer(movie, Cert("GB", "12A"));
+        await ApplyAsync();
+        Assert.Equal("PG-13", movie.CustomRating);
+        Tmdb.Answer(movie, Cert("DE", "16"));
+        await ApplyAsync();
+        Assert.Equal("R", movie.CustomRating);
+
+        await Service.RevertAsync([movie.Id], apply: true, exclude: false, CancellationToken.None);
+
+        Assert.Null(movie.CustomRating);
+    }
+
+    [Fact]
+    public async Task Revert_RestoresAnEarlierHandSetRating()
+    {
+        Context.Configuration.RespectManualCustomRating = false;
+        var movie = Library.AddMovie("Film", official: "G", custom: "PG");
+        Tmdb.Answer(movie, Cert("DE", "16"));
+        await ApplyAsync();
+        Assert.Equal("R", movie.CustomRating);
+
+        await Service.RevertAsync([movie.Id], apply: true, exclude: true, CancellationToken.None);
+
+        Assert.Equal(("PG", 10), (movie.CustomRating, movie.InheritedParentalRatingValue));
+    }
+
+    [Fact]
+    public async Task RevertingASeries_PutsBackTheEpisodesThatCarryItsRating()
+    {
+        var series = Library.AddSeries("Show", official: "TV-PG");
+        var pilot = Library.AddEpisode(series, "Pilot", official: "TV-PG");
+        var handSet = Library.AddEpisode(series, "Hand-set", official: "TV-PG", custom: "TV-14");
+        Tmdb.Answer(series, Cert("GB", "18"));
+        await ApplyAsync();
+        Assert.Equal("TV-MA", pilot.CustomRating);
+
+        var report = await Service.RevertAsync([series.Id], apply: true, exclude: true, CancellationToken.None);
+
+        Assert.Equal(1, report.ChildrenReverted);
+        Assert.Null(series.CustomRating);
+        Assert.Equal((null, 10), (pilot.CustomRating, pilot.InheritedParentalRatingValue));
+        Assert.Equal("TV-14", handSet.CustomRating);
+    }
+
+    [Fact]
+    public async Task Revert_OfSomethingNotInTheLedger_DoesNothing()
+    {
+        var movie = Library.AddMovie("Film", official: "PG", custom: "R");
+
+        var report = await Service.RevertAsync([movie.Id], apply: true, exclude: true, CancellationToken.None);
+
+        Assert.Equal((0, 1), (report.Reverted, report.NotInLedger));
+        Assert.Equal("R", movie.CustomRating);
+    }
+}
+
+[Collection(JellyfinStaticsCollection.Name)]
+public class RecheckTests : ServiceTestBase
+{
+    [Fact]
+    public async Task RecheckReview_AsksAfresh_AndFoldsIntoTheReport()
+    {
+        var unrated = Library.AddMovie("Unrated", tmdb: "1");
+        var rated = Library.AddMovie("Rated", official: "Approved", tmdb: "2");
+        Tmdb.Answer(rated, Cert("DE", "16"));
+        await PreviewAsync();
+        Assert.Equal((1, 1), (Service.LoadReport()!.Counts["Review"], Service.LoadReport()!.Counts["Raise"]));
+
+        // A source now has an answer for the title that needed review.
+        Tmdb.Answer(unrated, Cert("DE", "12"));
+        Tmdb.Asked.Clear();
+        var recheck = await Service.RecheckReviewAsync(apply: false, CancellationToken.None);
+
+        Assert.NotNull(recheck);
+        Assert.Equal(1, recheck.ItemsScanned);
+        Assert.Equal([unrated.Id], Tmdb.Asked); // only the review list
+        Assert.Equal(TimeSpan.Zero, Tmdb.LastMaxAge); // bypassing the cache
+        var saved = Service.LoadReport()!;
+        Assert.Equal((0, 2), (saved.Counts["Review"], saved.Counts["Raise"]));
+        Assert.Null(unrated.CustomRating); // preview only
+    }
+
+    [Fact]
+    public async Task RecheckReview_CanWriteWhatItFinds()
+    {
+        var unrated = Library.AddMovie("Unrated", tmdb: "1");
+        await PreviewAsync();
+        Tmdb.Answer(unrated, Cert("DE", "12"));
+
+        await Service.RecheckReviewAsync(apply: true, CancellationToken.None);
+
+        Assert.Equal("PG-13", unrated.CustomRating);
+    }
+}
+
+[Collection(JellyfinStaticsCollection.Name)]
 public class RestoreTests : ServiceTestBase
 {
     [Fact]

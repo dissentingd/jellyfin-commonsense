@@ -73,6 +73,37 @@ public sealed class RunReport
     public List<ReportEntry> Entries { get; set; } = [];
 }
 
+/// <summary>What a revert found and did.</summary>
+public sealed class RevertReport
+{
+    /// <summary>Gets or sets a value indicating whether changes were written.</summary>
+    public bool Applied { get; set; }
+
+    /// <summary>Gets or sets how many titles were asked for.</summary>
+    public int Requested { get; set; }
+
+    /// <summary>Gets or sets titles reverted (or, in a preview, that would be).</summary>
+    public int Reverted { get; set; }
+
+    /// <summary>Gets or sets seasons and episodes reverted with their series.</summary>
+    public int ChildrenReverted { get; set; }
+
+    /// <summary>Gets or sets titles added to the exclusion list.</summary>
+    public int Excluded { get; set; }
+
+    /// <summary>Gets or sets ids that aren't in the ledger (nothing to revert).</summary>
+    public int NotInLedger { get; set; }
+
+    /// <summary>Gets or sets titles whose rating someone changed since the plugin wrote it; left alone.</summary>
+    public List<string> ChangedSince { get; set; } = [];
+
+    /// <summary>Gets or sets ledger titles no longer in the library.</summary>
+    public List<string> NotFound { get; set; } = [];
+
+    /// <summary>Gets or sets write errors.</summary>
+    public List<string> Errors { get; set; } = [];
+}
+
 /// <summary>What a ledger restore found and did.</summary>
 public sealed class RestoreReport
 {

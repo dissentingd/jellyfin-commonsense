@@ -46,6 +46,8 @@ history problem:
   hide those too.
 - Copies a series' rating to its **seasons and episodes** (Jellyfin enforces each episode separately),
   including episodes added later.
+- Lets you **revert** any rating it wrote (a series' episodes too), optionally excluding the title from
+  future runs.
 - Keeps a **ledger** of every rating written, which you can download and re-apply by TMDb/IMDb/TVDb id —
   e.g. after restoring an older database backup. With Jellyfin's NFO saver enabled, each `.nfo` also
   gets a `<customrating>` copy.
@@ -75,6 +77,9 @@ unzip `Jellyfin.Plugin.RatingsFixer.dll` into a new folder in Jellyfin's plugin 
 3. Click **Preview (dry run)**. When the task finishes (Dashboard → Scheduled Tasks → Ratings Fixer),
    click **Refresh report** and read it: which titles would get stricter, which need review, and why.
 4. Happy with it? Click **Apply**, then **Download ledger** and keep the file.
+   Disagree with a rating? Find it under **Written ratings**, tick it and **Revert** — by default the
+   plugin then leaves that title alone.
+   Titles on the review list can be re-checked later with **Re-check review list**.
 5. Optionally turn on **Rate new items automatically**, or schedule the Apply task.
 
 Settings worth knowing:
@@ -93,8 +98,8 @@ Settings worth knowing:
 - **The first Apply on a big library is slow.** Jellyfin's own save costs a fraction of a second per item,
   and the first run writes every re-rated title plus all of its episodes — on a library with tens of
   thousands of titles, that's a couple of hours. Later runs only write what changed.
-- **Raise-only can't take anything back.** Removing a rule doesn't lower the ratings it wrote; restore
-  from a backup, or clear those Custom Ratings in the metadata editor.
+- **Raise-only never loosens a rating by itself.** To take ratings back — say after removing a rule —
+  use *Written ratings → Revert* (search `rule:` to find what a rule wrote).
 - **MDBList's free tier has a daily request limit.** Lookups are cached for 30 days, so a large library
   may take a few runs to fill in.
 - The rating ladders must use your libraries' **Metadata country**: Jellyfin scores every rating with

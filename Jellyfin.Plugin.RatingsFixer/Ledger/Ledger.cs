@@ -94,9 +94,28 @@ public sealed class RatingLedger
     /// <returns>The entry, or null.</returns>
     public LedgerEntry? Find(Guid itemId) => _entries.GetValueOrDefault(itemId);
 
-    /// <summary>Adds or replaces an item's entry.</summary>
+    /// <summary>
+    /// Adds or replaces an item's entry. When the item's previous custom rating is one we wrote ourselves,
+    /// the original "previous" values are carried over, so a revert goes back to what was there before the
+    /// plugin ever touched the item — not to its own earlier write.
+    /// </summary>
     /// <param name="entry">The entry.</param>
-    public void Upsert(LedgerEntry entry) => _entries[entry.ItemId] = entry;
+    public void Upsert(LedgerEntry entry)
+    {
+        if (_entries.TryGetValue(entry.ItemId, out var existing)
+            && string.Equals(existing.CustomRating, entry.PreviousCustomRating, StringComparison.Ordinal))
+        {
+            entry.PreviousCustomRating = existing.PreviousCustomRating;
+            entry.PreviousOfficialRating = existing.PreviousOfficialRating;
+        }
+
+        _entries[entry.ItemId] = entry;
+    }
+
+    /// <summary>Removes an item's entry.</summary>
+    /// <param name="itemId">Item id.</param>
+    /// <returns>Whether there was one.</returns>
+    public bool Remove(Guid itemId) => _entries.Remove(itemId);
 
     /// <summary>Writes the ledger to disk.</summary>
     public void Save()

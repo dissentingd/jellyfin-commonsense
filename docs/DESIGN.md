@@ -132,12 +132,28 @@ kept and the rest is picked up on a later run.
 - **Export** snapshots every Custom Rating in the library (including hand-set ones) in ledger format.
 - Jellyfin's NFO saver (if enabled) also writes `<customrating>`, giving a second copy beside the media (verified).
 
+## Revert and exclusions
+
+- The ledger keeps, per item, the custom and official rating from *before the plugin first wrote it*:
+  when an entry is replaced and the item's previous custom rating is our own earlier write, the original
+  "previous" values are carried over.
+- **Revert** (per item, from the ledger): only if the item still has the rating we wrote (otherwise it's
+  reported as changed since and left alone). The item goes back to its original custom rating (usually
+  none) with the enforced score recomputed; for a series, every season/episode carrying the reverted
+  rating goes back to the same value (the cascade only ever wrote children that had none or the series'
+  previous rating). The ledger entry is removed. Always previewed first.
+- **Exclusions** (`exclusions.json`, matched by item id or a shared provider id of the same kind): an
+  excluded title is skipped by every run and never looked up in sources, until *Include again*.
+- **Re-check review list**: re-runs only the latest report's review items with the source cache (and
+  cached "not found" id lookups) treated as stale, and folds the result into the saved report.
+
 ## Surfaces
 
 - **Settings page** (`Configuration/configPage.html`): keys, countries, rules, behaviour, run buttons,
   ledger download/export/restore, and the latest report with filters.
 - **Scheduled tasks** (category *Ratings Fixer*): Preview, Apply, Restore. No default triggers.
-- **API** (admin only, `/RatingsFixer/...`): `Report`, `Ledger`, `Export`, `Restore?apply=`, `ClearCache`,
+- **API** (admin only, `/RatingsFixer/...`): `Report`, `Ledger`, `LedgerEntries`, `Revert?apply=&exclude=`,
+  `Exclusions`, `Exclusions/Remove`, `RecheckReview?apply=`, `Presets`, `Export`, `Restore?apply=`, `ClearCache`,
   `Score?rating=&country=` (scores a rating exactly as the server does — for checking mappings).
 - **Auto-rate** (opt-in): movies/series whose metadata was downloaded, and the series of newly added
   episodes, are batched for a minute, then run through Apply. The plugin's own writes use `MetadataEdit`, so they don't re-trigger it.

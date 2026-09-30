@@ -2,6 +2,16 @@
 
 ## 1.1.0
 
+- **Revert.** A new *Written ratings* section lists every rating the plugin wrote; search it (by
+  title, rating or reason — e.g. everything a collection rule wrote), tick titles and revert them to
+  what they had before the plugin first touched them (usually no custom rating). A series' seasons and
+  episodes go back too. It previews the counts first, and leaves alone any rating someone changed since.
+  By default reverted titles are **excluded** from future runs (listed under *Excluded titles*, with
+  *Include again*).
+- **Re-check review list:** asks the sources afresh (skipping the cache) about just the titles that
+  need review, and updates the report — optionally writing what it finds.
+- The ledger now keeps each title's rating from *before the plugin first wrote it*, even across
+  repeated re-ratings, so a revert never lands on one of the plugin's own earlier ratings.
 - **Choose which libraries to re-rate** (settings → Libraries). Restore and export still cover every
   library, so a ledger can bring back ratings in a library that's no longer selected.
 - **Titles without a TMDb id are looked up by their IMDb id** (and series by their TVDb id) through
