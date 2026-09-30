@@ -7,6 +7,9 @@
   answer is cached (including "no rating"), a review re-check keeps its cache, and it stops cleanly at
   the daily limit — a large review list fills in over a few days of runs. Expect modest gains: on a real
   library's review list, about 3% of titles had a usable IMDb rating (most show N/A or Not Rated).
+- **Fixed:** a source answering `Approved` or `Passed` (the pre-1968 US seals, which Jellyfin scores
+  like G) was taken as a real rating, which could turn an unrated old film into G. It's now ignored like
+  any unusable rating, so such titles stay on the review list.
 
 ## 1.1.0
 

@@ -96,7 +96,10 @@ public sealed class RatingEngine
         }
 
         var value = raw.Value.Trim();
-        if (_scale.Score(value, raw.Country) is not { } score)
+
+        // A source saying "Approved" or "Passed" (a pre-1968 US seal, scored like G) tells us nothing about
+        // suitability - counting it would turn unrated old films into G. Treat it as no answer.
+        if (IsUnverified(value) || _scale.Score(value, raw.Country) is not { } score)
         {
             return null;
         }

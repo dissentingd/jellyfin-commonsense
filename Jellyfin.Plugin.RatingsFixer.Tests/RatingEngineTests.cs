@@ -148,6 +148,23 @@ public class RatingEngineTests
     }
 
     [Fact]
+    public void SourceSayingApproved_IsNotTakenAsG()
+    {
+        // "Approved" is a pre-1968 seal, not an age rating: an unrated film it's the only answer for must stay on
+        // the review list rather than become G (visible to every account).
+        Assert.Equal(DecisionKind.Review, Engine().Decide(Movie(null), [], [Cert("US", "Approved")]).Kind);
+        Assert.Equal(DecisionKind.Review, Engine().Decide(Movie("Approved"), [], [Cert("US", "Approved")]).Kind);
+    }
+
+    [Fact]
+    public void SourceSayingApproved_DoesNotDragTheConsensusDown()
+    {
+        // With a real rating alongside, "Approved" simply doesn't count.
+        var d = Engine().Decide(Movie("Approved"), [], [Cert("US", "Approved"), Cert("DE", "16")]);
+        Assert.Equal("R", d.NewRating);
+    }
+
+    [Fact]
     public void Scored_WithNoSources_IsKept()
     {
         Assert.Equal(DecisionKind.Keep, Engine().Decide(Movie("PG"), [], []).Kind);

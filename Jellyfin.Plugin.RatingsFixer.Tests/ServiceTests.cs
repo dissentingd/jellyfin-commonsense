@@ -371,6 +371,21 @@ public class SourceAndLibraryTests : ServiceTestBase
     }
 
     [Fact]
+    public async Task Omdb_Approved_LeavesTheTitleOnTheReviewList()
+    {
+        var old = Library.AddMovie("Old unrated film", tmdb: "2");
+        old.ProviderIds["Imdb"] = "tt2";
+        Tmdb.Answer(old, Cert("US", "Approved"));
+        Omdb.Answer(old, new RawRating("OMDb", CandidateKind.Certification, "US", "Approved"));
+
+        var report = await ApplyAsync();
+
+        Assert.Contains(old.Id, Omdb.Asked); // TMDb's "Approved" didn't count as covering it
+        Assert.Equal(1, report.Counts["Review"]);
+        Assert.Null(old.CustomRating);
+    }
+
+    [Fact]
     public async Task Omdb_Counts_EvenWhenTheUsIsNotAMainCountry()
     {
         var gap = Library.AddMovie("Gap", tmdb: "2");
