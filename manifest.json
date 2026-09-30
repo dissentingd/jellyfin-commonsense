@@ -9,6 +9,14 @@
     "imageUrl": "",
     "versions": [
       {
+        "version": "1.3.0.0",
+        "changelog": "- **Review panel.** Titles no source could rate are listed with their poster, plot summary, genres and a\n  **suggested rating** with its reasons. Filter by text, genre, decade, type or \"has a suggestion\"; set a\n  rating per title, or select titles (or everything matching a filter) and accept their suggestions or set\n  them all to one rating. Writes go through the normal path (enforced score, series episodes, ledger — so\n  they can be reverted). Suggestions are never written unless you accept them.\n- **Suggestions** come from: content keywords in a title's tags (→ R), an editable genre → rating map,\n  and tag hints like `pre-code` → PG-13; optionally (off by default) from other titles in the same small\n  collection. The strictest signal wins, so suggestions err on the safe side. All editable under\n  *Review suggestions*.\n- **Load recommended settings / Undo:** fills the tuning settings with values tuned on a large real\n  library, without touching keys, rules or library choices, and without saving.\n- Long lists (report, written ratings, review) are paged, inside scrolling boxes; ticking titles or writing a\n  rating no longer jumps back to the top of the list.",
+        "targetAbi": "12.1.0.0",
+        "sourceUrl": "https://github.com/dissentingd/jellyfin-ratings-fixer/releases/download/v1.3.0/jellyfin-ratings-fixer_1.3.0.zip",
+        "checksum": "6d4e38f79cbbd2191c35ecad2046dc17",
+        "timestamp": "2026-09-30T18:41:12Z"
+      },
+      {
         "version": "1.2.0.0",
         "changelog": "- **OMDb as a gap-filler** (optional, free key from omdbapi.com): IMDb's US rating, asked only about\n  titles no other source could rate. Because a free key allows 1,000 lookups a day, it runs last, every\n  answer is cached (including \"no rating\"), a review re-check keeps its cache, and it stops cleanly at\n  the daily limit — a large review list fills in over a few days of runs. Expect modest gains: on a real\n  library's review list, about 3% of titles had a usable IMDb rating (most show N/A or Not Rated).\n- **Fixed:** a source answering `Approved` or `Passed` (the pre-1968 US seals, which Jellyfin scores\n  like G) was taken as a real rating, which could turn an unrated old film into G. It's now ignored like\n  any unusable rating, so such titles stay on the review list.",
         "targetAbi": "12.1.0.0",
