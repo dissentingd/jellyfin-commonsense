@@ -41,6 +41,12 @@ public class PluginConfiguration : BasePluginConfiguration
     /// <summary>Gets or sets the countries whose TMDb certifications count, comma-separated ISO 3166-1 codes.</summary>
     public string Countries { get; set; } = "US, GB, IE, AU, NZ, DE";
 
+    /// <summary>
+    /// Gets or sets countries whose certifications count only when none of <see cref="Countries"/> (nor Common
+    /// Sense) rates a title, comma-separated. They fill gaps without changing any other decision.
+    /// </summary>
+    public string FallbackCountries { get; set; } = "CA, FR, NL, BE, SE, NO, DK, FI, ES, PT, IT, BR, MX, JP, KR, SG, PL, RO";
+
     /// <summary>Gets or sets the MDBList API key.</summary>
     public string MdblistApiKey { get; set; } = string.Empty;
 

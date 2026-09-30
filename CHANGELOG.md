@@ -2,6 +2,10 @@
 
 ## 1.1.0
 
+- **Fallback countries.** Certifications from a second list of countries (default: Canada, most of
+  Europe, Brazil, Mexico, Japan, Korea, Singapore) count only for titles that none of your main
+  countries — nor Common Sense — rate. They fill gaps on the review list without changing any other
+  decision. On a large real library this resolved about a fifth of the titles that needed review.
 - **Revert.** A new *Written ratings* section lists every rating the plugin wrote; search it (by
   title, rating or reason — e.g. everything a collection rule wrote), tick titles and revert them to
   what they had before the plugin first touched them (usually no custom rating). A series' seasons and

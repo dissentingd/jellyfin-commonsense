@@ -186,6 +186,60 @@ public class ApplyTests : ServiceTestBase
     }
 
     [Fact]
+    public async Task FallbackCountry_RatesATitleTheMainCountriesDoNot()
+    {
+        var movie = Library.AddMovie("Foreign film");
+        Tmdb.Answer(movie, Cert("DE", "16"));
+        Context.Configuration.Countries = "US, GB";
+        Context.Configuration.FallbackCountries = "DE";
+
+        await ApplyAsync();
+
+        Assert.Equal("R", movie.CustomRating);
+    }
+
+    [Fact]
+    public async Task FallbackCountry_IsIgnored_WhenAMainCountryRatesTheTitle()
+    {
+        var movie = Library.AddMovie("Film", official: "PG-13");
+        Tmdb.Answer(movie, Cert("GB", "12A"), Cert("DE", "18"));
+        Context.Configuration.Countries = "US, GB";
+        Context.Configuration.FallbackCountries = "DE";
+
+        var report = await ApplyAsync();
+
+        Assert.Equal(1, report.Counts["Keep"]); // the German 18 would have raised it
+        Assert.Null(movie.CustomRating);
+    }
+
+    [Fact]
+    public async Task FallbackCountry_IsIgnored_WhenCommonSenseHasAnAge()
+    {
+        var movie = Library.AddMovie("Film");
+        Mdblist.Answer(movie, CommonSenseAge(10));
+        Tmdb.Answer(movie, Cert("DE", "18"));
+        Context.Configuration.Countries = "US, GB";
+        Context.Configuration.FallbackCountries = "DE";
+
+        await ApplyAsync();
+
+        Assert.Equal("PG", movie.CustomRating);
+    }
+
+    [Fact]
+    public async Task FallbackCountry_IsUsed_WhenTheMainCountriesOnlyHaveUnscorableRatings()
+    {
+        var movie = Library.AddMovie("Film");
+        Tmdb.Answer(movie, Cert("US", "NR"), Cert("DE", "12"));
+        Context.Configuration.Countries = "US, GB";
+        Context.Configuration.FallbackCountries = "DE";
+
+        await ApplyAsync();
+
+        Assert.Equal("PG-13", movie.CustomRating);
+    }
+
+    [Fact]
     public async Task CommonSense_CanBeTurnedOff()
     {
         var movie = Library.AddMovie("Unrated Film");

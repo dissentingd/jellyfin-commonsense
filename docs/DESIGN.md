@@ -50,6 +50,10 @@ Implemented in `Rating/RatingEngine.cs` (pure, unit-tested):
    - the **Common Sense Media age** from MDBList, if enabled. (MDBList's `certification` field is
      *not* used: live data showed it carries other countries' values — `U`, `15`, `12` — unlabelled.)
    Each is scored with Jellyfin's table for its country; an age N scores N. Unscorable values are ignored.
+   **Fallback countries**: only when none of the above is usable (no scorable main-country certification
+   and no Common Sense age) do certifications from the fallback list count — gaps get filled, existing
+   decisions never move. Motivation (measured): on a real library, ~22% of review titles were rated only
+   by countries outside the main six (FR, KR, NL, SE, CA, JP, …), and ~98% of those were scorable.
    Only the selected libraries are considered (all when none are selected); restore and export ignore
    the selection.
 4. **Combine** the candidates: by default the **consensus** (upper median — one unusually strict country

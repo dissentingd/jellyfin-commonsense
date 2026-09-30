@@ -90,6 +90,7 @@ Settings worth knowing:
 | Round to the nearest rating | On | Off rounds everything above 13 up to `R` |
 | Only ever make ratings stricter | On | Off lets sources lower ratings too |
 | Countries | US, GB, IE, AU, NZ, DE | ISO codes |
+| Fallback countries | CA, much of Europe, BR, MX, JP, KR, SG | Only for titles the main countries (and Common Sense) don't rate |
 | Libraries | all | Tick the ones to re-rate |
 | Rating system | US ladders | Presets for GB, CA, IE, DE, AU, NZ — match your libraries' Metadata country |
 

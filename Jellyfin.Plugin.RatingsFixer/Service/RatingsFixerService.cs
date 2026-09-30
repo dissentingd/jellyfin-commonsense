@@ -380,6 +380,7 @@ public sealed class RatingsFixerService(
 
         // 3. Decide, and write.
         var countries = SplitList(config.Countries);
+        var fallbackCountries = SplitList(config.FallbackCountries);
         var counts = Enum.GetValues<DecisionKind>().ToDictionary(k => k.ToString(), _ => 0);
         var done = 0;
         var itemsSinceSave = 0;
@@ -387,13 +388,7 @@ public sealed class RatingsFixerService(
         {
             ct.ThrowIfCancellationRequested();
             var snap = snapshots[item.Id];
-            var ratings = raw.GetValueOrDefault(item.Id, [])
-                .Where(r => r.Kind == CandidateKind.CommonSense
-                    ? config.UseCommonSense
-                    : r.Source != "MDBList" // MDBList "certification" has no reliable country; older caches may hold it
-                        && r.Country is not null
-                        && (countries.Count == 0 || countries.Contains(r.Country, StringComparer.OrdinalIgnoreCase)))
-                .ToList();
+            var ratings = SelectRatings(raw.GetValueOrDefault(item.Id, []), config, countries, fallbackCountries, engine);
             var decision = engine.Decide(snap, ruleHits.GetValueOrDefault(item.Id, []), ratings);
             counts[decision.Kind.ToString()]++;
             var changes = decision.Kind is DecisionKind.Raise or DecisionKind.Lower;
@@ -483,6 +478,31 @@ public sealed class RatingsFixerService(
         }
 
         return report;
+    }
+
+    /// <summary>
+    /// Picks the source ratings that count for an item: certifications from the main countries plus the
+    /// Common Sense age. Only when none of those is usable do certifications from the fallback countries
+    /// count — so fallbacks fill gaps without ever changing a decision the main countries already make.
+    /// </summary>
+    internal static List<RawRating> SelectRatings(IReadOnlyList<RawRating> raw, PluginConfiguration config, List<string> countries, List<string> fallbackCountries, RatingEngine engine)
+    {
+        // MDBList's "certification" has no reliable country (and older caches may hold it), so it never counts.
+        var certifications = raw.Where(r => r.Kind == CandidateKind.Certification && r.Source != "MDBList" && r.Country is not null).ToList();
+        var main = certifications
+            .Where(r => countries.Count == 0 || countries.Contains(r.Country!, StringComparer.OrdinalIgnoreCase))
+            .Concat(raw.Where(r => r.Kind == CandidateKind.CommonSense && config.UseCommonSense))
+            .ToList();
+        if (main.Any(r => engine.Score(r) is not null) || fallbackCountries.Count == 0)
+        {
+            return main;
+        }
+
+        var fallback = certifications
+            .Where(r => fallbackCountries.Contains(r.Country!, StringComparer.OrdinalIgnoreCase)
+                && !countries.Contains(r.Country!, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+        return fallback.Count > 0 ? fallback : main;
     }
 
     private static bool WillSkip(ItemSnapshot s, PluginConfiguration config) =>
