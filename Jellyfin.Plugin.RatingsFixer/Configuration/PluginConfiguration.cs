@@ -114,13 +114,14 @@ public class PluginConfiguration : BasePluginConfiguration
     public string GenreRatings { get; set; } = "Horror=R\nThriller=PG-13\nCrime=PG-13\nWar=PG-13\nDocumentary=PG-13\nAnimation=PG\nFamily=PG";
 
     /// <summary>Gets or sets a value indicating whether ratings of other titles in the same collection inform suggestions.</summary>
-    public bool SuggestFromCollections { get; set; } = true;
+    public bool SuggestFromCollections { get; set; }
 
     /// <summary>
-    /// Gets or sets the largest collection whose titles inform suggestions. Franchises are small; big collections
-    /// are usually lists ("Top Rated", a whole label's catalogue) whose strictest member says nothing about a title.
+    /// Gets or sets the largest collection whose titles inform suggestions. Small collections share many traits
+    /// (same franchise, cast, era, tone); big ones usually share just one (a label, a list, a theme), so their
+    /// strictest member says little about a title.
     /// </summary>
-    public int SuggestionCollectionMaxSize { get; set; } = 30;
+    public int SuggestionCollectionMaxSize { get; set; } = 4;
 
     /// <summary>Gets or sets tag → rating era hints for the review list, one <c>tag=Rating</c> per line.</summary>
     public string EraTags { get; set; } = "pre-code=PG-13";

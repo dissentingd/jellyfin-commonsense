@@ -8,8 +8,9 @@
   them all to one rating. Writes go through the normal path (enforced score, series episodes, ledger — so
   they can be reverted). Suggestions are never written unless you accept them.
 - **Suggestions** come from: content keywords in a title's tags (→ R), an editable genre → rating map,
-  other titles in the same (franchise-sized) collection, and tag hints like `pre-code` → PG-13. The
-  strictest signal wins, so suggestions err on the safe side. All editable under *Review suggestions*.
+  and tag hints like `pre-code` → PG-13; optionally (off by default) from other titles in the same small
+  collection. The strictest signal wins, so suggestions err on the safe side. All editable under
+  *Review suggestions*.
 - **Load recommended settings / Undo:** fills the tuning settings with values tuned on a large real
   library, without touching keys, rules or library choices, and without saving.
 - Long lists (report, written ratings, review) are paged, inside scrolling boxes.

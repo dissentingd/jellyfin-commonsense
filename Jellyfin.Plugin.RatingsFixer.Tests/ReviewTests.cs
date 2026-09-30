@@ -9,7 +9,7 @@ public class ReviewSuggesterTests
 {
     private static ReviewSuggester Suggester(PluginConfiguration? config = null)
     {
-        config ??= new PluginConfiguration();
+        config ??= new PluginConfiguration { SuggestFromCollections = true };
         var scale = new FakeScale();
         return new ReviewSuggester(scale, new RatingEngine(scale, RatingsFixerService.ToEngineOptions(config)), RatingsFixerService.ToSuggesterOptions(config));
     }
@@ -53,6 +53,13 @@ public class ReviewSuggesterTests
     }
 
     [Fact]
+    public void CollectionSiblings_AreOffByDefault()
+    {
+        Assert.False(new PluginConfiguration().SuggestFromCollections);
+        Assert.Equal(4, new PluginConfiguration().SuggestionCollectionMaxSize);
+    }
+
+    [Fact]
     public void CollectionSiblings_CanBeTurnedOff()
     {
         var config = new PluginConfiguration { SuggestFromCollections = false };
@@ -84,6 +91,7 @@ public class ReviewPanelTests : ServiceTestBase
     [Fact]
     public async Task ReviewList_ShowsMetadata_AndSuggestionsIncludingCollectionSiblings()
     {
+        Context.Configuration.SuggestFromCollections = true;
         var sequel = Library.AddMovie("Sequel", tmdb: "1");
         sequel.Overview = "The story continues.";
         var original = Library.AddMovie("Original", official: "PG-13", tmdb: "2");
@@ -103,6 +111,7 @@ public class ReviewPanelTests : ServiceTestBase
     [Fact]
     public async Task BigCollections_AreIgnoredForSuggestions()
     {
+        Context.Configuration.SuggestFromCollections = true;
         var unrated = Library.AddMovie("Unrated", tmdb: "1");
         var strict = Library.AddMovie("Strict", official: "R", tmdb: "2");
         var list = Library.AddCollection("Top Rated", [unrated, strict, .. Enumerable.Range(0, 5).Select(i => Library.AddMovie($"Filler {i}", official: "G", tmdb: $"f{i}"))]);

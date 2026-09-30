@@ -144,10 +144,11 @@ with a reason; the strictest wins (erring safe) and is mapped onto the item's la
 
 - **Content keywords** in the title's tags (TMDb keywords, for most libraries) → `R` by default.
 - **Genre map** (default Horror → R; Thriller/Crime/War/Documentary → PG-13; Animation/Family → PG).
-- **Collection siblings**: the strictest rating among the other titles of each collection it's in —
-  only collections with at most 30 titles. Measured on a real library: collections of ≤ 28 titles were
-  franchises; lists (a label's whole catalogue, top-10s, "stand-up specials") ran to hundreds and made
-  every member look as strict as its strictest entry.
+- **Collection siblings** (off by default): the strictest rating among the other titles of each
+  collection it's in, only for collections of at most 4 titles. Small collections share many traits
+  (franchise, cast, era, tone); large ones usually share one (a label, a list, a theme) — on a real
+  library with many kinds of collections, even a limit of 30 made suggestions misleading, and lists running
+  to hundreds of titles made every member look as strict as its strictest entry.
 - **Tag hints** (default `pre-code` → PG-13).
 
 Suggestions are **never written automatically** — a wrong guess could expose content to children. The

@@ -182,12 +182,12 @@
                         <textarea is="emby-textarea" id="EraTags" rows="2" label="Tag hints (tag=Rating, one per line)"></textarea>
                     </div>
                     <div class="checkboxContainer checkboxContainer-withDescription">
-                        <label><input is="emby-checkbox" type="checkbox" id="SuggestFromCollections" /><span>Suggest from other titles in the same collection</span></label>
+                        <label><input is="emby-checkbox" type="checkbox" id="SuggestFromCollections" /><span>Suggest from other titles in the same collection (off by default)</span></label>
                         <div class="fieldDescription checkboxFieldDescription">Sequels and series entries usually share a rating: suggests the strictest rating among a collection's other titles.</div>
                     </div>
                     <div class="inputContainer">
                         <input is="emby-input" type="number" id="SuggestionCollectionMaxSize" min="0" label="Only use collections with at most this many titles" />
-                        <div class="fieldDescription">Franchises are small; big collections are usually lists (top-10s, a whole label's catalogue) that say nothing about a title's rating. 0 = no limit.</div>
+                        <div class="fieldDescription">Small collections share many traits (same franchise, cast, era, tone); big ones usually share just one (a label, a list, a theme). Keep this small — 0 = no limit.</div>
                     </div>
                 </div>
 
