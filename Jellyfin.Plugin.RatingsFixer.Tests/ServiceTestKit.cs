@@ -34,6 +34,7 @@ public sealed class JellyfinStaticsCollection
 internal sealed class FakeLibrary
 {
     private readonly Dictionary<Guid, Guid> _seriesOf = [];
+    private readonly Dictionary<Guid, Guid> _libraryOf = [];
 
     public FakeLibrary()
     {
@@ -56,6 +57,15 @@ internal sealed class FakeLibrary
 
     /// <summary>Gets or sets an item whose save should fail.</summary>
     public BaseItem? FailOn { get; set; }
+
+    /// <summary>Puts items into a library (a recursive ParentId query on it returns them).</summary>
+    public void PutInLibrary(Guid library, params BaseItem[] items)
+    {
+        foreach (var item in items)
+        {
+            _libraryOf[item.Id] = library;
+        }
+    }
 
     public Movie AddMovie(string name, string? official = null, string? custom = null, string? tmdb = "1", params string[] tags)
     {
@@ -138,6 +148,11 @@ internal sealed class FakeLibrary
             result = result.Where(i => q.ItemIds.Contains(i.Id));
         }
 
+        if (q.ParentId != Guid.Empty)
+        {
+            result = result.Where(i => _libraryOf.TryGetValue(i.Id, out var l) && l == q.ParentId);
+        }
+
         if (q.AncestorIds.Length > 0)
         {
             result = result.Where(i => _seriesOf.TryGetValue(i.Id, out var s) && q.AncestorIds.Contains(s));
@@ -180,10 +195,26 @@ internal sealed class FakeSource(string name) : IRatingSource
     }
 }
 
+/// <summary>Resolves TMDb ids from a dictionary of IMDb ids, recording what it was asked.</summary>
+internal sealed class FakeResolver : ITmdbIdResolver
+{
+    public Dictionary<string, string> ByImdb { get; } = [];
+
+    public List<Guid> Asked { get; } = [];
+
+    public Task<Dictionary<Guid, string>> ResolveAsync(IReadOnlyList<ItemSnapshot> items, string apiKey, IdMapCache cache, TimeSpan retryAfter, CancellationToken cancellationToken)
+    {
+        Asked.AddRange(items.Select(i => i.Id));
+        return Task.FromResult(items
+            .Where(i => i.GetProviderId("Imdb") is { } imdb && ByImdb.ContainsKey(imdb))
+            .ToDictionary(i => i.Id, i => ByImdb[i.GetProviderId("Imdb")!]));
+    }
+}
+
 /// <summary>Settings and a throwaway data folder.</summary>
 internal sealed class TestContext : IPluginContext, IDisposable
 {
-    public PluginConfiguration Configuration { get; } = new() { TmdbApiKey = "test", MdblistApiKey = "test" };
+    public PluginConfiguration Configuration { get; } = new() { TmdbApiKey = "test", MdblistApiKey = "test", TvdbApiKey = "test" };
 
     public string DataFolderPath { get; } = Path.Combine(Path.GetTempPath(), "rf-tests-" + Guid.NewGuid().ToString("N"));
 
@@ -213,7 +244,7 @@ public abstract class ServiceTestBase : IDisposable
         BaseItem.ConfigurationManager = config.Object;
         BaseItem.LibraryManager = Library.Mock.Object;
 
-        Service = new RatingsFixerService(Library.Mock.Object, Scale, [Tmdb, Mdblist], Context, NullLogger<RatingsFixerService>.Instance);
+        Service = new RatingsFixerService(Library.Mock.Object, Scale, [Tmdb, Mdblist, Tvdb], Context, NullLogger<RatingsFixerService>.Instance, Resolver);
     }
 
     internal FakeLibrary Library { get; } = new();
@@ -221,6 +252,10 @@ public abstract class ServiceTestBase : IDisposable
     internal FakeSource Tmdb { get; } = new("TMDb");
 
     internal FakeSource Mdblist { get; } = new("MDBList");
+
+    internal FakeSource Tvdb { get; } = new("TVDb");
+
+    internal FakeResolver Resolver { get; } = new();
 
     internal TestContext Context { get; } = new();
 

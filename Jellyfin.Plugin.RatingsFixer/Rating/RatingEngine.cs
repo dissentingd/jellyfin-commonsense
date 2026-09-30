@@ -235,22 +235,32 @@ public sealed class RatingEngine
         }
 
         var target = needed.Score;
+        int chosenScore;
         if (!nearest)
         {
-            return steps.FirstOrDefault(s => s.Score.Score >= target) is { Rating: not null } up ? up : steps[^1];
+            chosenScore = steps.FirstOrDefault(s => s.Score.Score >= target) is { Rating: not null } up ? up.Score.Score : steps[^1].Score.Score;
         }
-
-        // Nearest step; a tie goes to the looser one (15 sits between PG-13 and R → PG-13).
-        var best = steps[0];
-        foreach (var step in steps)
+        else
         {
-            if (Math.Abs(step.Score.Score - target) < Math.Abs(best.Score.Score - target))
+            // Nearest score; a tie goes to the looser one (15 sits between PG-13 and R → PG-13).
+            chosenScore = steps[0].Score.Score;
+            foreach (var step in steps)
             {
-                best = step;
+                if (Math.Abs(step.Score.Score - target) < Math.Abs(chosenScore - target))
+                {
+                    chosenScore = step.Score.Score;
+                }
             }
         }
 
-        return best;
+        // Several steps can share a score and differ only by sub-score (Australia's PG, M and MA15+ are
+        // all 15): take the one whose sub-score is closest, so a BBFC 15 (15.3) becomes MA15+, not PG.
+        var neededSub = needed.Score == chosenScore ? needed.SubScore ?? 0 : 0;
+        return steps
+            .Where(s => s.Score.Score == chosenScore)
+            .OrderBy(s => Math.Abs((s.Score.SubScore ?? 0) - neededSub))
+            .ThenBy(s => s.Score.SubScore ?? 0)
+            .First();
     }
 
     private (RatingCandidate Chosen, string How) Choose(List<RatingCandidate> candidates, bool fromRules)

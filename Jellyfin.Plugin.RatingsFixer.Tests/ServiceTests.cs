@@ -231,6 +231,96 @@ public class ApplyTests : ServiceTestBase
 }
 
 [Collection(JellyfinStaticsCollection.Name)]
+public class SourceAndLibraryTests : ServiceTestBase
+{
+    [Fact]
+    public async Task OnlySelectedLibraries_AreProcessed()
+    {
+        var kids = Guid.NewGuid();
+        var other = Guid.NewGuid();
+        var inKids = Library.AddMovie("Kids film", official: "Approved", tmdb: "1");
+        var inOther = Library.AddMovie("Other film", official: "Approved", tmdb: "2");
+        Library.PutInLibrary(kids, inKids);
+        Library.PutInLibrary(other, inOther);
+        Tmdb.Answer(inKids, Cert("DE", "16"));
+        Tmdb.Answer(inOther, Cert("DE", "16"));
+        Context.Configuration.LibraryIds = [kids.ToString()];
+
+        var report = await ApplyAsync();
+
+        Assert.Equal(1, report.ItemsScanned);
+        Assert.Equal("R", inKids.CustomRating);
+        Assert.Null(inOther.CustomRating);
+        Assert.DoesNotContain(inOther.Id, Tmdb.Asked);
+    }
+
+    [Fact]
+    public async Task Restore_IgnoresTheLibrarySelection()
+    {
+        var elsewhere = Library.AddMovie("Film", official: "PG", tmdb: "77");
+        Library.PutInLibrary(Guid.NewGuid(), elsewhere);
+        Context.Configuration.LibraryIds = [Guid.NewGuid().ToString()];
+        LedgerEntry[] entries = [new() { ItemId = elsewhere.Id, Name = "Film", CustomRating = "R", ProviderIds = { ["Tmdb"] = "77" } }];
+
+        await Service.RestoreAsync(entries, apply: true, CancellationToken.None);
+
+        Assert.Equal("R", elsewhere.CustomRating);
+    }
+
+    [Fact]
+    public async Task TitleWithoutTmdbId_IsLookedUpByImdbId()
+    {
+        var movie = Library.AddMovie("Film", official: "Approved", tmdb: null);
+        movie.ProviderIds["Imdb"] = "tt0000001";
+        Resolver.ByImdb["tt0000001"] = "555";
+        Tmdb.Answers[movie.Id] = [Cert("DE", "16")];
+
+        var report = await ApplyAsync();
+
+        Assert.Contains(movie.Id, Resolver.Asked);
+        Assert.Contains(movie.Id, Tmdb.Asked);
+        Assert.Equal("R", movie.CustomRating);
+        Assert.False(movie.ProviderIds.ContainsKey("Tmdb")); // Jellyfin's own ids are left alone
+        Assert.DoesNotContain(report.Warnings, w => w.Contains("no TMDb id", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task TitlesWithATmdbId_AreNotLookedUp()
+    {
+        var movie = Library.AddMovie("Film", official: "Approved", tmdb: "9");
+        movie.ProviderIds["Imdb"] = "tt0000002";
+
+        await PreviewAsync();
+
+        Assert.Empty(Resolver.Asked);
+    }
+
+    [Fact]
+    public async Task TvdbRatings_CountForSeries()
+    {
+        var series = Library.AddSeries("Show", official: "TV-PG");
+        series.ProviderIds["Tvdb"] = "121361";
+        Tvdb.Answer(series, new RawRating("TVDb", CandidateKind.Certification, "GB", "18"));
+
+        await ApplyAsync();
+
+        Assert.Equal("TV-MA", series.CustomRating);
+        Assert.Contains(series.Id, Tvdb.Asked);
+    }
+
+    [Fact]
+    public async Task Tvdb_IsSkippedWithoutAKey()
+    {
+        Library.AddSeries("Show", official: "TV-PG");
+        Context.Configuration.TvdbApiKey = string.Empty;
+
+        await PreviewAsync();
+
+        Assert.Empty(Tvdb.Asked);
+    }
+}
+
+[Collection(JellyfinStaticsCollection.Name)]
 public class SeriesTests : ServiceTestBase
 {
     [Fact]

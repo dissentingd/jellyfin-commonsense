@@ -62,6 +62,40 @@ public class SourceParserTests
     }
 
     [Fact]
+    public void TvdbSeries_MapsThreeLetterCountries_AndDropsUnknownOnes()
+    {
+        var json = """
+            {"status":"success","data":{"id":1,"name":"Show","contentRatings":[
+              {"id":1,"name":"TV-MA","country":"usa","contentType":""},
+              {"id":2,"name":"15","country":"gbr","contentType":""},
+              {"id":3,"name":"TV-14","country":"usa","contentType":"episode"},
+              {"id":4,"name":"K-16","country":"xyz","contentType":""},
+              {"id":5,"name":"","country":"deu","contentType":""}]}}
+            """;
+
+        var ratings = SourceParsers.ParseTvdbSeries(json);
+
+        Assert.Equal(
+            [new RawRating("TVDb", CandidateKind.Certification, "US", "TV-MA"), new RawRating("TVDb", CandidateKind.Certification, "GB", "15")],
+            ratings);
+    }
+
+    [Fact]
+    public void TvdbSeries_WithoutRatings_IsEmpty()
+    {
+        Assert.Empty(SourceParsers.ParseTvdbSeries("""{"status":"success","data":{"id":1,"name":"Show"}}"""));
+    }
+
+    [Fact]
+    public void TmdbFind_ReadsTheRightResultList()
+    {
+        var json = """{"movie_results":[{"id":603}],"tv_results":[{"id":1399}],"person_results":[]}""";
+        Assert.Equal("603", SourceParsers.ParseTmdbFind(json, series: false));
+        Assert.Equal("1399", SourceParsers.ParseTmdbFind(json, series: true));
+        Assert.Null(SourceParsers.ParseTmdbFind("""{"movie_results":[]}""", series: false));
+    }
+
+    [Fact]
     public void Mdblist_SingleObject()
     {
         var parsed = SourceParsers.ParseMdblist("""{"tmdbid":5,"commonsense":1,"age_rating":"13+"}""", true, true);
@@ -124,6 +158,23 @@ public class PersistenceTests : IDisposable
         Assert.Empty(two);
         Assert.False(reloaded.TryGet("movie:1", TimeSpan.FromTicks(-1), out _));
         Assert.False(reloaded.TryGet("movie:3", TimeSpan.FromDays(1), out _));
+    }
+
+    [Fact]
+    public void IdMap_KeepsFoundIds_AndRetriesMissesLater()
+    {
+        var path = Path.Combine(_dir, "ids.json");
+        var cache = IdMapCache.Load(path);
+        cache.Set("imdb_id:tt1:movie", "603");
+        cache.Set("imdb_id:tt2:movie", null);
+        cache.Save();
+
+        var reloaded = IdMapCache.Load(path);
+        Assert.True(reloaded.TryGet("imdb_id:tt1:movie", TimeSpan.Zero, out var found));
+        Assert.Equal("603", found);
+        Assert.True(reloaded.TryGet("imdb_id:tt2:movie", TimeSpan.FromDays(1), out var missing));
+        Assert.Null(missing);
+        Assert.False(reloaded.TryGet("imdb_id:tt2:movie", TimeSpan.FromTicks(-1), out _));
     }
 
     [Fact]

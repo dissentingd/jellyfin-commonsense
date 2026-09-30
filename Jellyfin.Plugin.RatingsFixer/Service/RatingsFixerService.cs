@@ -32,12 +32,14 @@ public sealed class JellyfinRatingScale(ILocalizationManager localization) : IRa
 /// <param name="sources">Rating sources.</param>
 /// <param name="context">The plugin's settings and data folder.</param>
 /// <param name="logger">Logger.</param>
+/// <param name="resolver">Finds TMDb ids from IMDb/TVDb ids; optional.</param>
 public sealed class RatingsFixerService(
     ILibraryManager libraryManager,
     IRatingScale scale,
     IEnumerable<IRatingSource> sources,
     IPluginContext context,
-    ILogger<RatingsFixerService> logger)
+    ILogger<RatingsFixerService> logger,
+    ITmdbIdResolver? resolver = null)
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
 
@@ -128,7 +130,7 @@ public sealed class RatingsFixerService(
         try
         {
             var report = new RestoreReport { Applied = apply, Entries = entries.Count };
-            var items = LoadItems(null);
+            var items = LoadItems(null, allLibraries: true);
             var byId = items.ToDictionary(i => i.Id);
             var byProvider = new Dictionary<string, BaseItem>(StringComparer.OrdinalIgnoreCase);
             foreach (var item in items)
@@ -198,7 +200,7 @@ public sealed class RatingsFixerService(
     /// <summary>Snapshots every Custom Rating in the library (ours or not) as ledger entries.</summary>
     /// <returns>The entries.</returns>
     public List<LedgerEntry> ExportCustomRatings() =>
-        LoadItems(null)
+        LoadItems(null, allLibraries: true)
             .Where(i => !string.IsNullOrWhiteSpace(i.CustomRating))
             .Select(i => ToLedgerEntry(i, null, i.CustomRating!, "export"))
             .ToList();
@@ -239,7 +241,7 @@ public sealed class RatingsFixerService(
             var ratings = raw.GetValueOrDefault(item.Id, [])
                 .Where(r => r.Kind == CandidateKind.CommonSense
                     ? config.UseCommonSense
-                    : r.Source == "TMDb" // MDBList "certification" has no reliable country; older caches may hold it
+                    : r.Source != "MDBList" // MDBList "certification" has no reliable country; older caches may hold it
                         && r.Country is not null
                         && (countries.Count == 0 || countries.Contains(r.Country, StringComparer.OrdinalIgnoreCase)))
                 .ToList();
@@ -382,21 +384,42 @@ public sealed class RatingsFixerService(
         Candidates = d.Candidates.Select(c => $"{c.Origin} = {c.Score}").ToList(),
     };
 
-    private List<BaseItem> LoadItems(IReadOnlyCollection<Guid>? onlyItems)
+    private List<BaseItem> LoadItems(IReadOnlyCollection<Guid>? onlyItems, bool allLibraries = false)
     {
-        var query = new InternalItemsQuery
+        InternalItemsQuery Query(Guid? library)
         {
-            IncludeItemTypes = [BaseItemKind.Movie, BaseItemKind.Series],
-            Recursive = true,
-            IsVirtualItem = false,
-        };
-        if (onlyItems is not null)
-        {
-            query.ItemIds = [.. onlyItems];
+            var query = new InternalItemsQuery
+            {
+                IncludeItemTypes = [BaseItemKind.Movie, BaseItemKind.Series],
+                Recursive = true,
+                IsVirtualItem = false,
+            };
+            if (library is { } id)
+            {
+                // A recursive ParentId query covers everything inside that library.
+                query.ParentId = id;
+            }
+
+            if (onlyItems is not null)
+            {
+                query.ItemIds = [.. onlyItems];
+            }
+
+            return query;
         }
 
-        return libraryManager.GetItemList(query).Where(i => i is Movie or Series).ToList();
+        var libraries = allLibraries ? [] : SelectedLibraries();
+        var found = libraries.Count == 0
+            ? libraryManager.GetItemList(Query(null))
+            : libraries.SelectMany(l => libraryManager.GetItemList(Query(l))).DistinctBy(i => i.Id).ToList();
+        return found.Where(i => i is Movie or Series).ToList();
     }
+
+    private List<Guid> SelectedLibraries() =>
+        (Config.LibraryIds ?? [])
+            .Select(id => Guid.TryParse(id, out var g) ? g : Guid.Empty)
+            .Where(g => g != Guid.Empty)
+            .ToList();
 
     private Dictionary<Guid, List<RatingCandidate>> MatchRules(PluginConfiguration config, List<BaseItem> items, RatingEngine engine, List<string> warnings)
     {
@@ -452,34 +475,42 @@ public sealed class RatingsFixerService(
     private async Task<Dictionary<Guid, List<RawRating>>> FetchSourcesAsync(PluginConfiguration config, List<ItemSnapshot> items, List<string> warnings, IProgress<double>? progress, CancellationToken ct)
     {
         var merged = new Dictionary<Guid, List<RawRating>>();
+        var tmdbKey = config.TmdbApiKey.Trim();
         var enabled = sources.Where(s => s.Name switch
         {
-            "TMDb" => config.UseTmdb && !string.IsNullOrWhiteSpace(config.TmdbApiKey),
+            "TMDb" => config.UseTmdb && tmdbKey.Length > 0,
             "MDBList" => !string.IsNullOrWhiteSpace(config.MdblistApiKey),
+            "TVDb" => config.UseTvdb && !string.IsNullOrWhiteSpace(config.TvdbApiKey),
             _ => false,
         }).ToList();
         if (enabled.Count == 0)
         {
-            warnings.Add("No source is configured (TMDb or MDBList API key), so only rules and legacy mappings were applied.");
+            warnings.Add("No source is configured (TMDb, MDBList or TVDb API key), so only rules and legacy mappings were applied.");
             return merged;
         }
 
+        var maxAge = TimeSpan.FromDays(Math.Max(0, config.CacheDays));
+        items = await ResolveTmdbIdsAsync(items, tmdbKey, maxAge, warnings, ct).ConfigureAwait(false);
         var withoutTmdb = items.Count(i => i.TmdbId is null);
         if (withoutTmdb > 0)
         {
-            warnings.Add($"{withoutTmdb} item(s) have no TMDb id, so no source could be asked about them.");
+            warnings.Add($"{withoutTmdb} item(s) have no TMDb id (and none could be found from their IMDb/TVDb ids), so TMDb and MDBList couldn't be asked about them.");
         }
 
-        var maxAge = TimeSpan.FromDays(Math.Max(0, config.CacheDays));
         for (var s = 0; s < enabled.Count; s++)
         {
             var source = enabled[s];
             var cache = SourceCache.Load(Path.Combine(DataDir, $"cache-{source.Name.ToLowerInvariant()}.json"));
-            var key = source.Name == "TMDb" ? config.TmdbApiKey.Trim() : config.MdblistApiKey.Trim();
+            var (key, pin) = source.Name switch
+            {
+                "TMDb" => (tmdbKey, (string?)null),
+                "TVDb" => (config.TvdbApiKey.Trim(), config.TvdbPin.Trim()),
+                _ => (config.MdblistApiKey.Trim(), null),
+            };
             var slice = new Progress<double>(p => progress?.Report(2 + (78.0 * (s + (p / 100)) / enabled.Count)));
             try
             {
-                var found = await source.FetchAsync(items, new SourceRun(key, cache, maxAge, warnings), slice, ct).ConfigureAwait(false);
+                var found = await source.FetchAsync(items, new SourceRun(key, cache, maxAge, warnings, pin), slice, ct).ConfigureAwait(false);
                 foreach (var (id, ratings) in found)
                 {
                     if (!merged.TryGetValue(id, out var list))
@@ -505,6 +536,42 @@ public sealed class RatingsFixerService(
         }
 
         return merged;
+    }
+
+    /// <summary>
+    /// For items with no TMDb id, looks one up from their IMDb (or, for series, TVDb) id, so every source
+    /// keyed by TMDb id can be asked about them. Jellyfin's own provider ids are left untouched.
+    /// </summary>
+    private async Task<List<ItemSnapshot>> ResolveTmdbIdsAsync(List<ItemSnapshot> items, string tmdbKey, TimeSpan retryAfter, List<string> warnings, CancellationToken ct)
+    {
+        var missing = items.Where(i => i.TmdbId is null && (i.GetProviderId("Imdb") is not null || (i.IsSeries && i.GetProviderId("Tvdb") is not null))).ToList();
+        if (resolver is null || tmdbKey.Length == 0 || missing.Count == 0)
+        {
+            return items;
+        }
+
+        var cache = IdMapCache.Load(Path.Combine(DataDir, "tmdb-ids.json"));
+        try
+        {
+            var found = await resolver.ResolveAsync(missing, tmdbKey, cache, retryAfter, ct).ConfigureAwait(false);
+            return items.Select(i => found.TryGetValue(i.Id, out var tmdbId)
+                ? i with { ProviderIds = new Dictionary<string, string>(i.ProviderIds, StringComparer.OrdinalIgnoreCase) { ["Tmdb"] = tmdbId } }
+                : i).ToList();
+        }
+        catch (SourceUnavailableException ex)
+        {
+            warnings.Add(ex.Message);
+            return items;
+        }
+        catch (HttpRequestException ex)
+        {
+            warnings.Add($"TMDb couldn't be reached to look up missing ids: {ex.Message}");
+            return items;
+        }
+        finally
+        {
+            cache.Save();
+        }
     }
 
     /// <summary>

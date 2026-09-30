@@ -58,9 +58,27 @@
                         <input is="emby-input" type="password" id="MdblistApiKey" label="MDBList API key" autocomplete="off" />
                         <div class="fieldDescription">Free from mdblist.com → Preferences. The free tier has a daily request limit; lookups are cached, so a large library may take a few days of runs to fill in.</div>
                     </div>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label><input is="emby-checkbox" type="checkbox" id="UseTvdb" /><span>Use TVDb content ratings for series</span></label>
+                        <div class="fieldDescription checkboxFieldDescription">Often has ratings for shows that TMDb lacks. Needs a TVDb key.</div>
+                    </div>
+                    <div class="inputContainer">
+                        <input is="emby-input" type="password" id="TvdbApiKey" label="TVDb API key" autocomplete="off" />
+                        <div class="fieldDescription">A v4 project key from thetvdb.com → Dashboard → API keys.</div>
+                    </div>
+                    <div class="inputContainer">
+                        <input is="emby-input" type="password" id="TvdbPin" label="TVDb subscriber PIN (only for user-supported keys)" autocomplete="off" />
+                    </div>
                     <div class="inputContainer">
                         <input is="emby-input" type="number" id="CacheDays" min="0" label="Cache source lookups for (days)" />
+                        <div class="fieldDescription">Titles without a TMDb id are looked up by their IMDb (or TVDb) id when a TMDb key is set.</div>
                     </div>
+                </div>
+
+                <div class="verticalSection">
+                    <h3 class="sectionTitle">Libraries</h3>
+                    <p class="cs-muted">Which libraries to re-rate. Leave all unticked to include every movie and TV library.</p>
+                    <div id="cs-libraries"><p class="cs-muted">Loading…</p></div>
                 </div>
 
                 <div class="verticalSection">
@@ -97,12 +115,18 @@
                         <label><input is="emby-checkbox" type="checkbox" id="AutoRateNewItems" /><span>Rate new items automatically</span></label>
                         <div class="fieldDescription checkboxFieldDescription">Applies the same rules to movies and series as their metadata is downloaded. Turn on once you're happy with a full run.</div>
                     </div>
+                    <div class="selectContainer">
+                        <select is="emby-select" id="cs-preset" label="Rating system">
+                            <option value="">Choose a country to fill in the ladders below…</option>
+                        </select>
+                        <div class="fieldDescription" id="cs-preset-hint">Pick the country your libraries' <b>Metadata country</b> is set to — Jellyfin scores ratings with that country's table.</div>
+                    </div>
                     <div class="inputContainer">
                         <input is="emby-input" type="text" id="MovieLadder" label="Ratings a movie can be given (loosest first)" />
                     </div>
                     <div class="inputContainer">
                         <input is="emby-input" type="text" id="SeriesLadder" label="Ratings a series can be given (loosest first)" />
-                        <div class="fieldDescription">A source's rating is rounded up to the next step on the ladder, e.g. a German FSK 16 becomes R.</div>
+                        <div class="fieldDescription">A source's rating is mapped onto the ladder (to the nearest step, or up — see above), e.g. a German FSK 16 becomes R.</div>
                     </div>
                     <div class="inputContainer">
                         <textarea is="emby-textarea" id="LegacyMap" rows="5" label="Legacy ratings Jellyfin can't score (OLD=NEW, one per line)"></textarea>
@@ -156,8 +180,8 @@
         (function () {
             var pluginId = '65127be7-01ef-469f-b13b-ecfa1289f5ed';
             var page = document.querySelector('#ratingsFixerConfigPage');
-            var textFields = ['Combine', 'TmdbApiKey', 'Countries', 'MdblistApiKey', 'MovieLadder', 'SeriesLadder', 'LegacyMap', 'UnverifiedRatings'];
-            var boolFields = ['UseTmdb', 'UseCommonSense', 'RoundToNearest', 'RaiseOnly', 'RespectManualCustomRating', 'RespectLockedRating', 'AutoRateNewItems'];
+            var textFields = ['Combine', 'TmdbApiKey', 'Countries', 'MdblistApiKey', 'TvdbApiKey', 'TvdbPin', 'MovieLadder', 'SeriesLadder', 'LegacyMap', 'UnverifiedRatings'];
+            var boolFields = ['UseTmdb', 'UseCommonSense', 'UseTvdb', 'RoundToNearest', 'RaiseOnly', 'RespectManualCustomRating', 'RespectLockedRating', 'AutoRateNewItems'];
             var report = null;
 
             function $(sel) { return page.querySelector(sel); }
@@ -191,6 +215,8 @@
                     textFields.forEach(function (f) { $('#' + f).value = config[f] || ''; });
                     boolFields.forEach(function (f) { $('#' + f).checked = !!config[f]; });
                     $('#CacheDays').value = config.CacheDays;
+                    loadLibraries(config.LibraryIds || []);
+                    loadPresets();
                     $('#cs-rules').innerHTML = '';
                     (config.Rules || []).forEach(addRule);
                     Dashboard.hideLoadingMsg();
@@ -205,6 +231,7 @@
                     textFields.forEach(function (f) { config[f] = $('#' + f).value; });
                     boolFields.forEach(function (f) { config[f] = $('#' + f).checked; });
                     config.CacheDays = parseInt($('#CacheDays').value, 10) || 0;
+                    config.LibraryIds = Array.prototype.map.call(page.querySelectorAll('.cs-library:checked'), function (c) { return c.value; });
                     config.Rules = Array.prototype.map.call(page.querySelectorAll('.cs-rule'), function (row) {
                         return {
                             Match: row.querySelector('.cs-match').value,
@@ -238,6 +265,48 @@
                 });
             }
 
+            function loadLibraries(selected) {
+                ApiClient.getVirtualFolders().then(function (folders) {
+                    var usable = folders.filter(function (f) { return !f.CollectionType || f.CollectionType === 'movies' || f.CollectionType === 'tvshows' || f.CollectionType === 'mixed'; });
+                    $('#cs-libraries').innerHTML = usable.map(function (f) {
+                        var checked = selected.indexOf(f.ItemId) >= 0 ? ' checked' : '';
+                        return '<div class="checkboxContainer" style="margin-bottom:.3em"><label><input is="emby-checkbox" type="checkbox" class="cs-library" value="' + esc(f.ItemId) + '"' + checked + ' /><span>' +
+                            esc(f.Name) + ' <span class="cs-muted">' + esc(f.CollectionType || 'mixed') + '</span></span></label></div>';
+                    }).join('') || '<p class="cs-muted">No movie or TV libraries found.</p>';
+                });
+            }
+
+            var presets = [];
+            var serverCountry = '';
+
+            function loadPresets() {
+                ApiClient.ajax({ type: 'GET', url: ApiClient.getUrl('RatingsFixer/Presets'), dataType: 'json' }).then(function (r) {
+                    presets = r.Presets || r.presets || [];
+                    serverCountry = (r.ServerCountry || r.serverCountry || '').toUpperCase();
+                    var select = $('#cs-preset');
+                    select.innerHTML = '<option value="">Choose a country to fill in the ladders below…</option>' + presets.map(function (p) {
+                        var c = p.Country || p.country;
+                        return '<option value="' + esc(c) + '">' + esc(p.Name || p.name) + (c === serverCountry ? ' — your server' : '') + '</option>';
+                    }).join('');
+                    if (serverCountry) {
+                        $('#cs-preset-hint').innerHTML = 'Your server\'s metadata country is <b>' + esc(serverCountry) + '</b>. Pick the country your libraries\' Metadata country is set to — Jellyfin scores ratings with that country\'s table.';
+                    }
+                });
+            }
+
+            function applyPreset() {
+                var code = $('#cs-preset').value;
+                var preset = presets.filter(function (p) { return (p.Country || p.country) === code; })[0];
+                if (!preset) { return; }
+                if (serverCountry && code !== serverCountry &&
+                    !window.confirm('Your server\'s metadata country is ' + serverCountry + ', not ' + code + '. Ratings from another country\'s system may not be recognised by Jellyfin. Use this preset anyway?')) {
+                    $('#cs-preset').value = '';
+                    return;
+                }
+                $('#MovieLadder').value = preset.Movies || preset.movies;
+                $('#SeriesLadder').value = preset.Series || preset.series;
+            }
+
             function loadReport() {
                 ApiClient.ajax({ type: 'GET', url: ApiClient.getUrl('RatingsFixer/Report'), dataType: 'json' }).then(function (r) {
                     report = r;
@@ -259,7 +328,7 @@
                     ' — ' + esc(r.ItemsScanned || r.itemsScanned) + ' items scanned.</p>';
                 html += '<div class="cs-counts">' + ['Raise', 'Lower', 'Review', 'Skip', 'Keep'].map(function (k) {
                     return '<div><b>' + esc(counts[k] || 0) + '</b>' + ({ Raise: 'stricter', Lower: 'looser', Review: 'need review', Skip: 'skipped', Keep: 'unchanged' })[k] + '</div>';
-                }).join('') + '<div><b>' + esc(r.ChildrenUpdated || r.childrenUpdated || 0) + '</b>seasons/episodes given their series' rating</div></div>';
+                }).join('') + '<div><b>' + esc(r.ChildrenUpdated || r.childrenUpdated || 0) + '</b>seasons/episodes given their series&#39; rating</div></div>';
                 warnings.forEach(function (w) { html += '<p class="cs-warn">⚠ ' + esc(w) + '</p>'; });
                 html += '<div class="cs-filters">' +
                     '<div class="selectContainer" style="margin:0"><select is="emby-select" id="cs-filter-kind" label="Show">' +
@@ -326,11 +395,10 @@
             page.addEventListener('pageshow', load);
             $('#ratingsFixerConfigForm').addEventListener('submit', save);
             $('#cs-add-rule').addEventListener('click', function () { addRule(); });
+            $('#cs-preset').addEventListener('change', applyPreset);
             $('#cs-preview').addEventListener('click', function () { startTask('RatingsFixerPreview', 'Preview'); });
             $('#cs-apply').addEventListener('click', function () {
-                if (window.confirm('Write Custom Ratings to your library now?
-
-Have you backed up Jellyfin's database? Every change is recorded in the ledger, but only a backup can undo an Apply.')) {
+                if (window.confirm('Write Custom Ratings to your library now?\n\nHave you backed up Jellyfin\'s database? Every change is recorded in the ledger, but only a backup can undo an Apply.')) {
                     startTask('RatingsFixerApply', 'Apply');
                 }
             });

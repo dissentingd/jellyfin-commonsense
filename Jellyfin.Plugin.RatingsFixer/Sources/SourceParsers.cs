@@ -136,6 +136,80 @@ public static class SourceParsers
         return result;
     }
 
+    /// <summary>
+    /// Parses TVDb v4 <c>/series/{id}/extended</c>: every <c>contentRatings</c> entry, with TVDb's
+    /// three-letter country codes (<c>usa</c>, <c>gbr</c>) turned into the two-letter ones used elsewhere.
+    /// Countries without a known mapping are dropped.
+    /// </summary>
+    /// <param name="json">Response body.</param>
+    /// <returns>One rating per country.</returns>
+    public static List<RawRating> ParseTvdbSeries(string json)
+    {
+        var result = new List<RawRating>();
+        using var doc = JsonDocument.Parse(json);
+        if (!doc.RootElement.TryGetProperty("data", out var data)
+            || data.ValueKind != JsonValueKind.Object
+            || !data.TryGetProperty("contentRatings", out var ratings)
+            || ratings.ValueKind != JsonValueKind.Array)
+        {
+            return result;
+        }
+
+        foreach (var entry in ratings.EnumerateArray())
+        {
+            var name = GetString(entry, "name")?.Trim();
+            var country = GetString(entry, "country")?.Trim();
+            if (string.IsNullOrEmpty(name) || country is null || !Alpha3ToAlpha2.TryGetValue(country, out var code))
+            {
+                continue;
+            }
+
+            if (!result.Any(r => r.Country == code))
+            {
+                result.Add(new RawRating("TVDb", CandidateKind.Certification, code, name));
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>Parses TMDb <c>/find/{external_id}</c>: the TMDb id of the first movie or TV result.</summary>
+    /// <param name="json">Response body.</param>
+    /// <param name="series">Whether to read TV results (else movie results).</param>
+    /// <returns>The TMDb id, or null.</returns>
+    public static string? ParseTmdbFind(string json, bool series)
+    {
+        using var doc = JsonDocument.Parse(json);
+        if (!doc.RootElement.TryGetProperty(series ? "tv_results" : "movie_results", out var results)
+            || results.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        foreach (var result in results.EnumerateArray())
+        {
+            if (GetIdString(result, "id") is { } id)
+            {
+                return id;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>TVDb's ISO 3166-1 alpha-3 codes for the countries Jellyfin has rating tables for.</summary>
+    private static readonly Dictionary<string, string> Alpha3ToAlpha2 = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["arg"] = "AR", ["aus"] = "AU", ["aut"] = "AT", ["bel"] = "BE", ["bgr"] = "BG", ["bra"] = "BR",
+        ["can"] = "CA", ["che"] = "CH", ["chl"] = "CL", ["col"] = "CO", ["cze"] = "CZ", ["deu"] = "DE",
+        ["dnk"] = "DK", ["esp"] = "ES", ["fin"] = "FI", ["fra"] = "FR", ["gbr"] = "GB", ["grc"] = "GR",
+        ["hun"] = "HU", ["idn"] = "ID", ["ind"] = "IN", ["irl"] = "IE", ["ita"] = "IT", ["jpn"] = "JP",
+        ["kaz"] = "KZ", ["kor"] = "KR", ["ltu"] = "LT", ["mex"] = "MX", ["nld"] = "NL", ["nor"] = "NO",
+        ["nzl"] = "NZ", ["phl"] = "PH", ["pol"] = "PL", ["prt"] = "PT", ["rou"] = "RO", ["rus"] = "RU",
+        ["sgp"] = "SG", ["svk"] = "SK", ["swe"] = "SE", ["tha"] = "TH", ["tur"] = "TR", ["twn"] = "TW",
+        ["ukr"] = "UA", ["usa"] = "US", ["zaf"] = "ZA",
+    };
+
     private static int? GetCommonSenseAge(JsonElement item)
     {
         if (!item.TryGetProperty("commonsense", out var cs))

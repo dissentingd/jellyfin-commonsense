@@ -47,6 +47,18 @@ public class PluginConfiguration : BasePluginConfiguration
     /// <summary>Gets or sets a value indicating whether Common Sense Media ages (via MDBList) are used.</summary>
     public bool UseCommonSense { get; set; } = true;
 
+    /// <summary>Gets or sets the TVDb v4 API key (used for series).</summary>
+    public string TvdbApiKey { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the TVDb subscriber PIN, needed with user-supported keys.</summary>
+    public string TvdbPin { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets a value indicating whether TVDb content ratings are used for series.</summary>
+    public bool UseTvdb { get; set; } = true;
+
+    /// <summary>Gets or sets the libraries to process (library item ids); empty means all.</summary>
+    public string[] LibraryIds { get; set; } = [];
+
     /// <summary>Gets or sets how several sources' ratings become one.</summary>
     public CombineMode Combine { get; set; } = CombineMode.Median;
 

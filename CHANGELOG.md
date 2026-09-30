@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.1.0
+
+- **Choose which libraries to re-rate** (settings → Libraries). Restore and export still cover every
+  library, so a ledger can bring back ratings in a library that's no longer selected.
+- **Titles without a TMDb id are looked up by their IMDb id** (and series by their TVDb id) through
+  TMDb, so they're no longer skipped. Jellyfin's own ids aren't changed; lookups are cached.
+- **TVDb as an optional source for series** — often has ratings TMDb lacks. Needs a TVDb v4 key (and
+  the subscriber PIN for user-supported keys).
+- **Rating-system presets** for the US, UK, Canada, Ireland, Germany, Australia and New Zealand fill in
+  the rating ladders; the page shows your server's metadata country and warns on a mismatch.
+- When several ratings share a score (Australia's PG, M and MA15+ are all 15), a source's rating now
+  maps to the one with the closest sub-score — a BBFC 15 becomes MA15+, not PG.
+- **Fixed: the settings page didn't work.** Two JavaScript strings were broken in earlier versions, so
+  the page's buttons and saving failed. A test now parses the page's script on every build.
+
 ## 1.0.1
 
 No change in behaviour.

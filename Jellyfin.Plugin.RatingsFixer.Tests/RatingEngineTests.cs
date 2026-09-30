@@ -5,7 +5,7 @@ using Jellyfin.Plugin.RatingsFixer.Service;
 namespace Jellyfin.Plugin.RatingsFixer.Tests;
 
 /// <summary>A cut-down copy of Jellyfin 12.1's rating tables — enough to exercise the engine.</summary>
-internal sealed class FakeScale : IRatingScale
+internal sealed class FakeScale(string defaultCountry = "US") : IRatingScale
 {
     private static readonly Dictionary<string, Dictionary<string, RatingScore>> Tables = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -17,7 +17,11 @@ internal sealed class FakeScale : IRatingScale
         },
         ["GB"] = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["U"] = new(0), ["PG"] = new(10), ["12A"] = new(12), ["12"] = new(12), ["15"] = new(15), ["18"] = new(18), ["R18"] = new(1000),
+            ["U"] = new(0), ["PG"] = new(8), ["12A"] = new(12), ["12"] = new(12, 1), ["15"] = new(15, 3), ["18"] = new(18, 1), ["R18"] = new(1000),
+        },
+        ["AU"] = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["G"] = new(0), ["PG"] = new(15, 1), ["M"] = new(15, 2), ["MA15+"] = new(15, 3), ["R18+"] = new(18, 1),
         },
         ["DE"] = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -26,7 +30,7 @@ internal sealed class FakeScale : IRatingScale
     };
 
     public RatingScore? Score(string rating, string? country = null) =>
-        Tables.TryGetValue(country ?? "US", out var table) && table.TryGetValue(rating, out var score) ? score : null;
+        Tables.TryGetValue(country ?? defaultCountry, out var table) && table.TryGetValue(rating, out var score) ? score : null;
 }
 
 public class RatingEngineTests
@@ -216,8 +220,8 @@ public class RatingEngineTests
     [Fact]
     public void ExactCertificationFromTheOtherLadder_IsRounded()
     {
-        // A GB "PG" on a series maps onto the TV ladder instead of writing a movie rating.
-        Assert.Equal("TV-PG", Engine().Decide(Movie(null, series: true), [], [Cert("GB", "PG")]).NewRating);
+        // A US "PG" (a movie-ladder rating) on a series maps onto the TV ladder instead of being written as-is.
+        Assert.Equal("TV-PG", Engine().Decide(Movie(null, series: true), [], [Cert("US", "PG")]).NewRating);
     }
 
     [Fact]
@@ -232,6 +236,16 @@ public class RatingEngineTests
     {
         var engine = Engine(Defaults with { MovieLadder = ["G", "PG", "Typo", "R"] });
         Assert.Equal(["Typo"], engine.UnscoredLadderEntries);
+    }
+
+    [Fact]
+    public void SharedScore_PicksTheClosestSubScore()
+    {
+        // Australia's PG, M and MA15+ all score 15: a BBFC 15 (15.3) must land on MA15+, not PG.
+        var australia = new RatingEngine(new FakeScale("AU"), Defaults with { MovieLadder = ["G", "PG", "M", "MA15+", "R18+"] });
+
+        Assert.Equal("MA15+", australia.Decide(Movie(null), [], [Cert("GB", "15")]).NewRating);
+        Assert.Equal("R18+", australia.Decide(Movie(null), [], [Cert("GB", "18")]).NewRating);
     }
 
     [Fact]

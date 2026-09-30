@@ -50,11 +50,15 @@ Implemented in `Rating/RatingEngine.cs` (pure, unit-tested):
    - the **Common Sense Media age** from MDBList, if enabled. (MDBList's `certification` field is
      *not* used: live data showed it carries other countries' values — `U`, `15`, `12` — unlabelled.)
    Each is scored with Jellyfin's table for its country; an age N scores N. Unscorable values are ignored.
+   Only the selected libraries are considered (all when none are selected); restore and export ignore
+   the selection.
 4. **Combine** the candidates: by default the **consensus** (upper median — one unusually strict country
    can't move a title alone); optionally the strictest. Then map it onto the rating ladder for the item's
    type (movies: `G, PG, PG-13, R, NC-17`; series: `TV-Y … TV-MA`): by default to the **nearest** step,
    ties going looser (14–15 → `PG-13`, 16 → `R`); optionally always up. Board ratings are compared on the
-   whole score and never land on a sub-scored step that shares a score with a plain one, so a foreign
+   whole score and never land on a sub-scored step that shares a score with a plain one; among steps
+   sharing the chosen score, the closest sub-score wins (a BBFC 15 = 15.3 → Australia's MA15+ = 15.3,
+   not PG = 15.1). So a foreign
    `18` becomes `R`, not `NC-17` (a series still reaches `TV-MA`). A certification that *is* a step on the
    item's own ladder (e.g. TMDb US `NC-17`) is used as-is.
 5. **Raise-only** (default): write only if that's stricter than the current effective rating
@@ -110,6 +114,8 @@ from each series entry.
 |---|---|---|
 | User rules | tag / genre / collection → rating | Exact; uses curation the user already did |
 | TMDb `release_dates`, `content_ratings` | Every country's certification | v3 key or v4 token; 4 requests in flight |
+| TVDb v4 `/series/{id}/extended` | Series content ratings, every country (three-letter codes, mapped to two-letter) | Optional; needs a project key (+ PIN for user-supported keys); token cached per key |
+| TMDb `/find/{id}` | TMDb id from an IMDb id (or TVDb id for series) | Only for titles with no TMDb id; answers cached in `tmdb-ids.json`, misses retried after the cache period |
 | MDBList `POST /tmdb/{movie\|show}/` | `commonsense` flag + `age_rating` (Common Sense age) | Batches of 100; free tier has a daily limit |
 
 Lookups are cached per source in the plugin's data folder (default 30 days, empty answers included), and

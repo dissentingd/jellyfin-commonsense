@@ -1,8 +1,10 @@
 using System.Net.Mime;
 using System.Text;
+using Jellyfin.Plugin.RatingsFixer.Configuration;
 using Jellyfin.Plugin.RatingsFixer.Ledger;
 using Jellyfin.Plugin.RatingsFixer.Rating;
 using Jellyfin.Plugin.RatingsFixer.Service;
+using MediaBrowser.Controller.Configuration;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -12,10 +14,11 @@ namespace Jellyfin.Plugin.RatingsFixer.Api;
 /// <summary>Admin endpoints behind the settings page.</summary>
 /// <param name="service">The service.</param>
 /// <param name="scale">The rating scale.</param>
+/// <param name="configurationManager">Server configuration.</param>
 [ApiController]
 [Route("RatingsFixer")]
 [Authorize(Policy = "RequiresElevation")]
-public class RatingsFixerController(RatingsFixerService service, IRatingScale scale) : ControllerBase
+public class RatingsFixerController(RatingsFixerService service, IRatingScale scale, IServerConfigurationManager configurationManager) : ControllerBase
 {
     /// <summary>Gets the latest preview/apply report.</summary>
     /// <returns>The report.</returns>
@@ -92,6 +95,15 @@ public class RatingsFixerController(RatingsFixerService service, IRatingScale sc
         scale.Score(rating, string.IsNullOrWhiteSpace(country) ? null : country) is { } s
             ? new { rating, country, score = s.Score, subScore = s.SubScore }
             : NotFound();
+
+    /// <summary>Gets the ready-made rating ladders, and the server's metadata country to match them against.</summary>
+    /// <returns>The presets and the server's country.</returns>
+    [HttpGet("Presets")]
+    public ActionResult<object> Presets() => new
+    {
+        serverCountry = configurationManager.Configuration.MetadataCountryCode,
+        presets = LadderPresets.All,
+    };
 
     private FileContentResult JsonFile(string json, string name) =>
         File(Encoding.UTF8.GetBytes(json), MediaTypeNames.Application.Json, name);

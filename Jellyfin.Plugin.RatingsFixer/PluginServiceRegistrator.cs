@@ -20,8 +20,11 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         });
         serviceCollection.AddSingleton<IPluginContext, PluginContext>();
         serviceCollection.AddSingleton<IRatingScale, JellyfinRatingScale>();
-        serviceCollection.AddSingleton<IRatingSource, TmdbSource>();
+        serviceCollection.AddSingleton<TmdbSource>();
+        serviceCollection.AddSingleton<IRatingSource>(sp => sp.GetRequiredService<TmdbSource>());
+        serviceCollection.AddSingleton<ITmdbIdResolver>(sp => sp.GetRequiredService<TmdbSource>());
         serviceCollection.AddSingleton<IRatingSource, MdblistSource>();
+        serviceCollection.AddSingleton<IRatingSource, TvdbSource>();
         serviceCollection.AddSingleton<RatingsFixerService>();
         serviceCollection.AddHostedService<AutoRateService>();
     }

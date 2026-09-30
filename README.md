@@ -31,11 +31,13 @@ history problem:
 - Decides each title's rating from, in order:
   1. **Your rules** — e.g. everything in the collection “Adult” → `XXX`. Rules win outright.
   2. The **consensus** of current **TMDb certifications** from the countries you choose (each country's
-     most recent certification, so re-releases count) and the **Common Sense Media** age (via MDBList).
-     One unusually strict country can't re-rate a title on its own.
+     most recent certification, so re-releases count), **TVDb** content ratings for series (optional),
+     and the **Common Sense Media** age (via MDBList). One unusually strict country can't re-rate a
+     title on its own. Titles without a TMDb id are looked up by their IMDb or TVDb id.
   3. **Legacy mappings** for strings Jellyfin can't score (e.g. `GP` → `PG`).
-- Maps the result to the **nearest** rating on a ladder per type — movies `G, PG, PG-13, R, NC-17`,
-  series `TV-Y … TV-MA` — so a BBFC 12A becomes `PG-13`, an FSK 16 becomes `R`. A foreign 18 becomes
+- Maps the result to the **nearest** rating on a ladder per type — by default movies `G, PG, PG-13, R, NC-17`
+  and series `TV-Y … TV-MA`, so a BBFC 12A becomes `PG-13` and an FSK 16 becomes `R`. Presets fill in
+  the ladders for the UK, Canada, Ireland, Germany, Australia and New Zealand. A foreign 18 becomes
   `R`, never `NC-17`; `NC-17` and `XXX` only come from your rules or an actual `NC-17`.
 - **Raise-only by default** — never loosens a rating, and leaves hand-set Custom Ratings and locked
   rating fields alone.
@@ -66,9 +68,10 @@ unzip `Jellyfin.Plugin.RatingsFixer.dll` into a new folder in Jellyfin's plugin 
 ## Use
 
 1. **Back up Jellyfin's database** (see above).
-2. **Dashboard → Plugins → Ratings Fixer**: add a free [TMDb API key](https://www.themoviedb.org/settings/api)
-   and/or a free [MDBList API key](https://mdblist.com/preferences/), choose the countries whose ratings
-   count, and add any rules. Save.
+2. **Dashboard → Plugins → Ratings Fixer**: add a free [TMDb API key](https://www.themoviedb.org/settings/api),
+   a free [MDBList API key](https://mdblist.com/preferences/) and optionally a
+   [TVDb key](https://thetvdb.com/dashboard/account/apikey); choose the countries whose ratings count,
+   the libraries to re-rate, your country's rating system (if not the US), and any rules. Save.
 3. Click **Preview (dry run)**. When the task finishes (Dashboard → Scheduled Tasks → Ratings Fixer),
    click **Refresh report** and read it: which titles would get stricter, which need review, and why.
 4. Happy with it? Click **Apply**, then **Download ledger** and keep the file.
@@ -82,6 +85,8 @@ Settings worth knowing:
 | Round to the nearest rating | On | Off rounds everything above 13 up to `R` |
 | Only ever make ratings stricter | On | Off lets sources lower ratings too |
 | Countries | US, GB, IE, AU, NZ, DE | ISO codes |
+| Libraries | all | Tick the ones to re-rate |
+| Rating system | US ladders | Presets for GB, CA, IE, DE, AU, NZ — match your libraries' Metadata country |
 
 ## Good to know
 
@@ -92,7 +97,8 @@ Settings worth knowing:
   from a backup, or clear those Custom Ratings in the metadata editor.
 - **MDBList's free tier has a daily request limit.** Lookups are cached for 30 days, so a large library
   may take a few runs to fill in.
-- Defaults are US-centric. For another target country, set the rating ladders to your country's ratings.
+- The rating ladders must use your libraries' **Metadata country**: Jellyfin scores every rating with
+  that country's table, and a rating from another system may not be recognised.
 
 ## Develop
 
