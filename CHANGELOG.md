@@ -13,7 +13,8 @@
   *Review suggestions*.
 - **Load recommended settings / Undo:** fills the tuning settings with values tuned on a large real
   library, without touching keys, rules or library choices, and without saving.
-- Long lists (report, written ratings, review) are paged, inside scrolling boxes.
+- Long lists (report, written ratings, review) are paged, inside scrolling boxes; ticking titles or writing a
+  rating no longer jumps back to the top of the list.
 
 ## 1.2.0
 
