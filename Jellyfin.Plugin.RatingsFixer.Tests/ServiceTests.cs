@@ -118,6 +118,48 @@ public class ApplyTests : ServiceTestBase
     }
 
     [Fact]
+    public async Task CollectionRule_RatesItsMembers_AndOnlyThem()
+    {
+        var member = Library.AddMovie("Member", official: "R", tmdb: "1");
+        var memberSeries = Library.AddSeries("Member show", official: "TV-MA", tmdb: "2");
+        var outsider = Library.AddMovie("Outsider", official: "R", tmdb: "3");
+        Library.AddCollection("Adult", member, memberSeries);
+        Context.Configuration.Rules = [new UserRule { Match = RuleMatch.Collection, Value = "adult", Rating = "XXX" }];
+
+        var report = await ApplyAsync();
+
+        Assert.Equal(("XXX", 1000), (member.CustomRating, member.InheritedParentalRatingValue));
+        Assert.Equal("XXX", memberSeries.CustomRating);
+        Assert.Null(outsider.CustomRating);
+        Assert.Contains("rule: collection", report.Entries.Single(e => e.ItemId == member.Id).Reason);
+        Assert.DoesNotContain(member.Id, Tmdb.Asked);
+        Assert.Contains(outsider.Id, Tmdb.Asked);
+    }
+
+    [Fact]
+    public async Task CollectionRule_ForAMissingCollection_Warns()
+    {
+        Library.AddMovie("Film", official: "R");
+        Context.Configuration.Rules = [new UserRule { Match = RuleMatch.Collection, Value = "Nope", Rating = "XXX" }];
+
+        var report = await PreviewAsync();
+
+        Assert.Contains("No collection named \"Nope\" was found.", report.Warnings);
+    }
+
+    [Fact]
+    public async Task Rule_WithAnUnknownRating_Warns_AndIsSkipped()
+    {
+        var movie = Library.AddMovie("Film", official: "R", tags: "Adult");
+        Context.Configuration.Rules = [new UserRule { Match = RuleMatch.Tag, Value = "Adult", Rating = "XX" }];
+
+        var report = await ApplyAsync();
+
+        Assert.Contains(report.Warnings, w => w.Contains("\"XX\" isn't a rating", StringComparison.Ordinal));
+        Assert.Null(movie.CustomRating);
+    }
+
+    [Fact]
     public async Task MdblistCertification_IsIgnored()
     {
         // MDBList's "certification" carries other countries' ratings unlabelled, so it must not count.

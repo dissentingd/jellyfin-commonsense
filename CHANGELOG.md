@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.1
+
+No change in behaviour.
+
+- Service-level tests against an in-memory fake of Jellyfin's library, covering what gets written,
+  the enforced parental-rating score, series → episode cascades, collection/tag rules, the ledger,
+  restore and auto-rate triggers.
+- The service now receives its settings through an injected context (internal refactor for testing).
+
 ## 1.0.0
 
 First release, verified on Jellyfin 12.1.

@@ -72,6 +72,18 @@ internal sealed class FakeLibrary
         return series;
     }
 
+    public BoxSet AddCollection(string name, params BaseItem[] members)
+    {
+        var collection = new BoxSet
+        {
+            Id = Guid.NewGuid(),
+            Name = name,
+            LinkedChildren = [.. members.Select(m => new LinkedChild { ItemId = m.Id, Type = LinkedChildType.Manual })],
+        };
+        Items.Add(collection);
+        return collection;
+    }
+
     public Episode AddEpisode(Series series, string name, string? official = null, string? custom = null)
     {
         var episode = Init(new Episode(), name, official, custom, tmdb: null);
@@ -109,6 +121,7 @@ internal sealed class FakeLibrary
         Series => BaseItemKind.Series,
         Season => BaseItemKind.Season,
         Episode => BaseItemKind.Episode,
+        BoxSet => BaseItemKind.BoxSet,
         _ => BaseItemKind.Folder,
     };
 

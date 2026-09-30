@@ -151,10 +151,13 @@ kept and the rest is picked up on a later run.
   matching stored score (e.g. `XXX` → 1000, `TV-MA` → 17.1), movies through episodes.
 - A capped user loses an `XXX` movie from search and listings, and an `XXX` series from listings along
   with all of its episodes (browse and search); an uncapped user with the same libraries still sees both.
+- Collection rules resolve real collection membership: a temporary collection with one PG movie and a
+  rule "collection → R" produced exactly one proposed raise, PG → R, via that rule (preview only).
 
 ## Still to verify / improve
 
-- Auto-rate fires once per new item or episode and not on unrelated updates.
+- Auto-rate on episodes: new episodes of an already-rated series (movies verified live: a new movie was
+  picked up ~13 minutes after it was added, once its metadata arrived).
 
 ## Write cost (measured 2026-09-29)
 
