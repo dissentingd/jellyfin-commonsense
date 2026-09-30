@@ -34,6 +34,7 @@ history problem:
      most recent certification, so re-releases count), **TVDb** content ratings for series (optional),
      and the **Common Sense Media** age (via MDBList). One unusually strict country can't re-rate a
      title on its own. Titles without a TMDb id are looked up by their IMDb or TVDb id.
+  3. For titles none of those rate: **fallback countries**, then optionally **OMDb** (IMDb's US rating).
   3. **Legacy mappings** for strings Jellyfin can't score (e.g. `GP` → `PG`).
 - Maps the result to the **nearest** rating on a ladder per type — by default movies `G, PG, PG-13, R, NC-17`
   and series `TV-Y … TV-MA`, so a BBFC 12A becomes `PG-13` and an FSK 16 becomes `R`. Presets fill in
@@ -72,7 +73,7 @@ unzip `Jellyfin.Plugin.RatingsFixer.dll` into a new folder in Jellyfin's plugin 
 1. **Back up Jellyfin's database** (see above).
 2. **Dashboard → Plugins → Ratings Fixer**: add a free [TMDb API key](https://www.themoviedb.org/settings/api),
    a free [MDBList API key](https://mdblist.com/preferences/) and optionally a
-   [TVDb key](https://thetvdb.com/dashboard/account/apikey); choose the countries whose ratings count,
+   [TVDb key](https://thetvdb.com/dashboard/account/apikey) and an [OMDb key](https://www.omdbapi.com/apikey.aspx); choose the countries whose ratings count,
    the libraries to re-rate, your country's rating system (if not the US), and any rules. Save.
 3. Click **Preview (dry run)**. When the task finishes (Dashboard → Scheduled Tasks → Ratings Fixer),
    click **Refresh report** and read it: which titles would get stricter, which need review, and why.
@@ -123,8 +124,8 @@ release workflow builds, tests, publishes the zip, and adds the version to `mani
 ## Attribution
 
 This product uses the TMDB API but is not endorsed or certified by TMDB. Common Sense Media ages are
-retrieved through [MDBList](https://mdblist.com/). This project is not affiliated with or endorsed by
-TMDB, MDBList or Common Sense Media.
+retrieved through [MDBList](https://mdblist.com/); IMDb ratings through [OMDb](https://www.omdbapi.com/).
+This project is not affiliated with or endorsed by TMDB, MDBList, OMDb, IMDb or Common Sense Media.
 
 ## License
 

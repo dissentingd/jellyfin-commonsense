@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.0
+
+- **OMDb as a gap-filler** (optional, free key from omdbapi.com): IMDb's US rating, asked only about
+  titles no other source could rate. Because a free key allows 1,000 lookups a day, it runs last, every
+  answer is cached (including "no rating"), a review re-check keeps its cache, and it stops cleanly at
+  the daily limit — a large review list fills in over a few days of runs. Expect modest gains: on a real
+  library's review list, about 3% of titles had a usable IMDb rating (most show N/A or Not Rated).
+
 ## 1.1.0
 
 - **Fallback countries.** Certifications from a second list of countries (default: Canada, most of

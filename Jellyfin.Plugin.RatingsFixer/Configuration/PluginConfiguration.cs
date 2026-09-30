@@ -62,6 +62,12 @@ public class PluginConfiguration : BasePluginConfiguration
     /// <summary>Gets or sets a value indicating whether TVDb content ratings are used for series.</summary>
     public bool UseTvdb { get; set; } = true;
 
+    /// <summary>Gets or sets the OMDb API key.</summary>
+    public string OmdbApiKey { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets a value indicating whether OMDb (IMDb's US rating) fills gaps no other source covers.</summary>
+    public bool UseOmdb { get; set; } = true;
+
     /// <summary>Gets or sets the libraries to process (library item ids); empty means all.</summary>
     public string[] LibraryIds { get; set; } = [];
 

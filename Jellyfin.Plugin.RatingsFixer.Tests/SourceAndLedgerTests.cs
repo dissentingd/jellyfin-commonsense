@@ -96,6 +96,21 @@ public class SourceParserTests
     }
 
     [Fact]
+    public void Omdb_ParsesRatingsAndErrors()
+    {
+        var rated = SourceParsers.ParseOmdb("""{"Title":"X","Rated":"PG-13","Response":"True"}""");
+        Assert.Equal((OmdbStatus.Ok, "PG-13", "US"), (rated.Status, rated.Ratings.Single().Value, rated.Ratings.Single().Country));
+
+        Assert.Empty(SourceParsers.ParseOmdb("""{"Title":"X","Rated":"N/A","Response":"True"}""").Ratings);
+        Assert.Equal(OmdbStatus.LimitReached, SourceParsers.ParseOmdb("""{"Response":"False","Error":"Request limit reached!"}""").Status);
+        Assert.Equal(OmdbStatus.BadKey, SourceParsers.ParseOmdb("""{"Response":"False","Error":"Invalid API key!"}""").Status);
+
+        var missing = SourceParsers.ParseOmdb("""{"Response":"False","Error":"Incorrect IMDb ID."}""");
+        Assert.Equal(OmdbStatus.Ok, missing.Status);
+        Assert.Empty(missing.Ratings);
+    }
+
+    [Fact]
     public void Mdblist_SingleObject()
     {
         var parsed = SourceParsers.ParseMdblist("""{"tmdbid":5,"commonsense":1,"age_rating":"13+"}""", true, true);

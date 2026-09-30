@@ -25,6 +25,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<ITmdbIdResolver>(sp => sp.GetRequiredService<TmdbSource>());
         serviceCollection.AddSingleton<IRatingSource, MdblistSource>();
         serviceCollection.AddSingleton<IRatingSource, TvdbSource>();
+        serviceCollection.AddSingleton<IRatingSource, OmdbSource>();
         serviceCollection.AddSingleton<RatingsFixerService>();
         serviceCollection.AddHostedService<AutoRateService>();
     }

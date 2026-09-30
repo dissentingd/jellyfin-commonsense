@@ -218,7 +218,7 @@ internal sealed class FakeResolver : ITmdbIdResolver
 /// <summary>Settings and a throwaway data folder.</summary>
 internal sealed class TestContext : IPluginContext, IDisposable
 {
-    public PluginConfiguration Configuration { get; } = new() { TmdbApiKey = "test", MdblistApiKey = "test", TvdbApiKey = "test" };
+    public PluginConfiguration Configuration { get; } = new() { TmdbApiKey = "test", MdblistApiKey = "test", TvdbApiKey = "test", OmdbApiKey = "test" };
 
     public string DataFolderPath { get; } = Path.Combine(Path.GetTempPath(), "rf-tests-" + Guid.NewGuid().ToString("N"));
 
@@ -248,7 +248,7 @@ public abstract class ServiceTestBase : IDisposable
         BaseItem.ConfigurationManager = config.Object;
         BaseItem.LibraryManager = Library.Mock.Object;
 
-        Service = new RatingsFixerService(Library.Mock.Object, Scale, [Tmdb, Mdblist, Tvdb], Context, NullLogger<RatingsFixerService>.Instance, Resolver);
+        Service = new RatingsFixerService(Library.Mock.Object, Scale, [Tmdb, Mdblist, Tvdb, Omdb], Context, NullLogger<RatingsFixerService>.Instance, Resolver);
     }
 
     internal FakeLibrary Library { get; } = new();
@@ -258,6 +258,8 @@ public abstract class ServiceTestBase : IDisposable
     internal FakeSource Mdblist { get; } = new("MDBList");
 
     internal FakeSource Tvdb { get; } = new("TVDb");
+
+    internal FakeSource Omdb { get; } = new("OMDb");
 
     internal FakeResolver Resolver { get; } = new();
 

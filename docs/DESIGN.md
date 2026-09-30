@@ -119,6 +119,7 @@ from each series entry.
 | User rules | tag / genre / collection → rating | Exact; uses curation the user already did |
 | TMDb `release_dates`, `content_ratings` | Every country's certification | v3 key or v4 token; 4 requests in flight |
 | TVDb v4 `/series/{id}/extended` | Series content ratings, every country (three-letter codes, mapped to two-letter) | Optional; needs a project key (+ PIN for user-supported keys); token cached per key |
+| OMDb `?i={imdb id}` | IMDb's US rating (`Rated`) | Gap-filler: only titles nothing else rates; runs last; cache kept on re-checks; stops at the free tier's 1,000/day limit. Measured on a real review list: ~3% usable (most N/A / Not Rated / Approved) |
 | TMDb `/find/{id}` | TMDb id from an IMDb id (or TVDb id for series) | Only for titles with no TMDb id; answers cached in `tmdb-ids.json`, misses retried after the cache period |
 | MDBList `POST /tmdb/{movie\|show}/` | `commonsense` flag + `age_rating` (Common Sense age) | Batches of 100; free tier has a daily limit |
 

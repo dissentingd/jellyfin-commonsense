@@ -197,6 +197,34 @@ public static class SourceParsers
         return null;
     }
 
+    /// <summary>
+    /// Parses an OMDb <c>?i={imdb id}</c> response: IMDb's US rating (<c>Rated</c>). <c>N/A</c> means no rating.
+    /// </summary>
+    /// <param name="json">Response body.</param>
+    /// <returns>The outcome.</returns>
+    public static OmdbResult ParseOmdb(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        if (!string.Equals(GetString(root, "Response"), "True", StringComparison.OrdinalIgnoreCase))
+        {
+            var error = GetString(root, "Error") ?? string.Empty;
+            if (error.Contains("limit", StringComparison.OrdinalIgnoreCase))
+            {
+                return new OmdbResult(OmdbStatus.LimitReached, []);
+            }
+
+            return error.Contains("API key", StringComparison.OrdinalIgnoreCase)
+                ? new OmdbResult(OmdbStatus.BadKey, [])
+                : new OmdbResult(OmdbStatus.Ok, []); // not found, incorrect id: an answer, just an empty one
+        }
+
+        var rated = GetString(root, "Rated")?.Trim();
+        return string.IsNullOrEmpty(rated) || string.Equals(rated, "N/A", StringComparison.OrdinalIgnoreCase)
+            ? new OmdbResult(OmdbStatus.Ok, [])
+            : new OmdbResult(OmdbStatus.Ok, [new RawRating("OMDb", CandidateKind.Certification, "US", rated)]);
+    }
+
     /// <summary>TVDb's ISO 3166-1 alpha-3 codes for the countries Jellyfin has rating tables for.</summary>
     private static readonly Dictionary<string, string> Alpha3ToAlpha2 = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -284,3 +312,21 @@ public static class SourceParsers
     private static bool Wanted(IReadOnlyCollection<string> countries, string code) =>
         countries.Count == 0 || countries.Any(c => string.Equals(c, code, StringComparison.OrdinalIgnoreCase));
 }
+
+/// <summary>What an OMDb lookup said.</summary>
+public enum OmdbStatus
+{
+    /// <summary>An answer (possibly no rating).</summary>
+    Ok,
+
+    /// <summary>The daily request limit was reached.</summary>
+    LimitReached,
+
+    /// <summary>The API key was rejected.</summary>
+    BadKey,
+}
+
+/// <summary>A parsed OMDb response.</summary>
+/// <param name="Status">What happened.</param>
+/// <param name="Ratings">The rating, if any.</param>
+public sealed record OmdbResult(OmdbStatus Status, List<RawRating> Ratings);

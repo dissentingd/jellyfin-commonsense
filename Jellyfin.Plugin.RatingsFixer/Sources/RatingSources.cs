@@ -406,3 +406,110 @@ public sealed class TvdbSource(IHttpClientFactory httpClientFactory, ILogger<Tvd
         }
     }
 }
+
+/// <summary>
+/// OMDb: IMDb's US rating, by IMDb id. A gap-filler — the service only asks it about titles no other source
+/// could rate, because the free key allows 1,000 requests a day. Every answer is cached (including "no
+/// rating"); hitting the daily limit ends the lookups for this run and keeps what was fetched.
+/// </summary>
+/// <param name="httpClientFactory">HTTP client factory.</param>
+/// <param name="logger">Logger.</param>
+public sealed class OmdbSource(IHttpClientFactory httpClientFactory, ILogger<OmdbSource> logger) : IRatingSource
+{
+    private const string BaseUrl = "https://www.omdbapi.com/";
+
+    /// <inheritdoc />
+    public string Name => "OMDb";
+
+    /// <inheritdoc />
+    public async Task<Dictionary<Guid, List<RawRating>>> FetchAsync(IReadOnlyList<ItemSnapshot> items, SourceRun run, IProgress<double>? progress, CancellationToken cancellationToken)
+    {
+        var result = new Dictionary<Guid, List<RawRating>>();
+        var todo = new List<(ItemSnapshot Item, string ImdbId)>();
+        foreach (var item in items)
+        {
+            if (item.GetProviderId("Imdb") is not { } imdb)
+            {
+                continue;
+            }
+
+            if (run.Cache.TryGet($"imdb:{imdb}", run.MaxAge, out var cached))
+            {
+                result[item.Id] = cached;
+            }
+            else
+            {
+                todo.Add((item, imdb));
+            }
+        }
+
+        if (todo.Count == 0)
+        {
+            return result;
+        }
+
+        using var http = httpClientFactory.CreateClient(Plugin.HttpClientName);
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var limitReached = false;
+        var done = 0;
+        var gate = new Lock();
+        try
+        {
+            await Parallel.ForEachAsync(todo, new ParallelOptions { MaxDegreeOfParallelism = 2, CancellationToken = stop.Token }, async (work, ct) =>
+            {
+                var url = $"{BaseUrl}?i={Uri.EscapeDataString(work.ImdbId)}&apikey={Uri.EscapeDataString(run.ApiKey)}";
+                using var response = await http.GetAsync(url, ct).ConfigureAwait(false);
+                var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                OmdbResult parsed;
+                try
+                {
+                    parsed = SourceParsers.ParseOmdb(body);
+                }
+                catch (System.Text.Json.JsonException)
+                {
+                    throw new SourceUnavailableException($"OMDb returned HTTP {(int)response.StatusCode} with an unreadable body.");
+                }
+
+                switch (parsed.Status)
+                {
+                    case OmdbStatus.BadKey:
+                        throw new SourceUnavailableException("OMDb rejected the API key - check it on the plugin settings page.");
+                    case OmdbStatus.LimitReached:
+                        lock (gate)
+                        {
+                            limitReached = true;
+                        }
+
+                        await stop.CancelAsync().ConfigureAwait(false);
+                        return;
+                }
+
+                run.Cache.Set($"imdb:{work.ImdbId}", parsed.Ratings);
+                bool checkpoint;
+                lock (gate)
+                {
+                    result[work.Item.Id] = parsed.Ratings;
+                    progress?.Report(100.0 * ++done / todo.Count);
+                    checkpoint = done % 200 == 0;
+                }
+
+                if (checkpoint)
+                {
+                    run.Cache.Save();
+                }
+            }).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (limitReached && !cancellationToken.IsCancellationRequested)
+        {
+            // Stopped on purpose at the daily limit.
+        }
+
+        if (limitReached)
+        {
+            run.Warnings.Add($"OMDb's daily request limit was reached after {done} of {todo.Count} lookups; the rest will be looked up on a later run.");
+        }
+
+        logger.LogDebug("OMDb looked up {Done} of {Total} titles", done, todo.Count);
+        return result;
+    }
+}

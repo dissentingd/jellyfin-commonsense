@@ -375,12 +375,19 @@ public sealed class RatingsFixerService(
 
         // 2. Sources, for items no rule decided and that we might change.
         var needSources = snapshots.Values.Where(s => !ruleHits.ContainsKey(s.Id) && !WillSkip(s, config)).ToList();
-        var raw = await FetchSourcesAsync(config, needSources, report.Warnings, progress, ct, refreshSources).ConfigureAwait(false);
+        var countries = SplitList(config.Countries);
+        var fallbackCountries = SplitList(config.FallbackCountries);
+        var raw = await FetchSourcesAsync(
+            config,
+            needSources,
+            report.Warnings,
+            progress,
+            ct,
+            refreshSources,
+            ratings => SelectRatings(ratings, config, countries, fallbackCountries, engine).Any(r => engine.Score(r) is not null)).ConfigureAwait(false);
         progress?.Report(80);
 
         // 3. Decide, and write.
-        var countries = SplitList(config.Countries);
-        var fallbackCountries = SplitList(config.FallbackCountries);
         var counts = Enum.GetValues<DecisionKind>().ToDictionary(k => k.ToString(), _ => 0);
         var done = 0;
         var itemsSinceSave = 0;
@@ -490,7 +497,9 @@ public sealed class RatingsFixerService(
         // MDBList's "certification" has no reliable country (and older caches may hold it), so it never counts.
         var certifications = raw.Where(r => r.Kind == CandidateKind.Certification && r.Source != "MDBList" && r.Country is not null).ToList();
         var main = certifications
-            .Where(r => countries.Count == 0 || countries.Contains(r.Country!, StringComparer.OrdinalIgnoreCase))
+            .Where(r => r.Source == "OMDb" // only ever asked about gaps, so its answer always counts
+                || countries.Count == 0
+                || countries.Contains(r.Country!, StringComparer.OrdinalIgnoreCase))
             .Concat(raw.Where(r => r.Kind == CandidateKind.CommonSense && config.UseCommonSense))
             .ToList();
         if (main.Any(r => engine.Score(r) is not null) || fallbackCountries.Count == 0)
@@ -643,7 +652,9 @@ public sealed class RatingsFixerService(
         return items.Where(i => memberIds.Contains(i.Id));
     }
 
-    private async Task<Dictionary<Guid, List<RawRating>>> FetchSourcesAsync(PluginConfiguration config, List<ItemSnapshot> items, List<string> warnings, IProgress<double>? progress, CancellationToken ct, bool refresh = false)
+    // isUsable: whether an item's ratings so far already decide it; gap-filling sources (OMDb) are only
+    // asked about items for which it's false.
+    private async Task<Dictionary<Guid, List<RawRating>>> FetchSourcesAsync(PluginConfiguration config, List<ItemSnapshot> items, List<string> warnings, IProgress<double>? progress, CancellationToken ct, bool refresh = false, Func<List<RawRating>, bool>? isUsable = null)
     {
         var merged = new Dictionary<Guid, List<RawRating>>();
         var tmdbKey = config.TmdbApiKey.Trim();
@@ -652,11 +663,12 @@ public sealed class RatingsFixerService(
             "TMDb" => config.UseTmdb && tmdbKey.Length > 0,
             "MDBList" => !string.IsNullOrWhiteSpace(config.MdblistApiKey),
             "TVDb" => config.UseTvdb && !string.IsNullOrWhiteSpace(config.TvdbApiKey),
+            "OMDb" => config.UseOmdb && !string.IsNullOrWhiteSpace(config.OmdbApiKey),
             _ => false,
-        }).ToList();
+        }).OrderBy(s => s.Name == "OMDb").ToList(); // OMDb last: it only fills what the others left
         if (enabled.Count == 0)
         {
-            warnings.Add("No source is configured (TMDb, MDBList or TVDb API key), so only rules and legacy mappings were applied.");
+            warnings.Add("No source is configured (TMDb, MDBList, TVDb or OMDb API key), so only rules and legacy mappings were applied.");
             return merged;
         }
 
@@ -677,12 +689,21 @@ public sealed class RatingsFixerService(
             {
                 "TMDb" => (tmdbKey, (string?)null),
                 "TVDb" => (config.TvdbApiKey.Trim(), config.TvdbPin.Trim()),
+                "OMDb" => (config.OmdbApiKey.Trim(), null),
                 _ => (config.MdblistApiKey.Trim(), null),
             };
+
+            // OMDb's free key allows 1,000 requests a day: only ask it about items nothing else decided, and
+            // keep its cached answers even on a refresh.
+            var gapFiller = source.Name == "OMDb";
+            var ask = gapFiller && isUsable is not null
+                ? items.Where(i => !isUsable(merged.GetValueOrDefault(i.Id, []))).ToList()
+                : items;
+            var sourceMaxAge = gapFiller ? TimeSpan.FromDays(Math.Max(0, config.CacheDays)) : maxAge;
             var slice = new Progress<double>(p => progress?.Report(2 + (78.0 * (s + (p / 100)) / enabled.Count)));
             try
             {
-                var found = await source.FetchAsync(items, new SourceRun(key, cache, maxAge, warnings, pin), slice, ct).ConfigureAwait(false);
+                var found = await source.FetchAsync(ask, new SourceRun(key, cache, sourceMaxAge, warnings, pin), slice, ct).ConfigureAwait(false);
                 foreach (var (id, ratings) in found)
                 {
                     if (!merged.TryGetValue(id, out var list))

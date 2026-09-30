@@ -350,6 +350,66 @@ public class SourceAndLibraryTests : ServiceTestBase
     }
 
     [Fact]
+    public async Task Omdb_IsOnlyAskedAboutTitlesNothingElseRates()
+    {
+        var covered = Library.AddMovie("Covered", official: "Approved", tmdb: "1");
+        covered.ProviderIds["Imdb"] = "tt1";
+        var gap = Library.AddMovie("Gap", tmdb: "2");
+        gap.ProviderIds["Imdb"] = "tt2";
+        var onlyNotRated = Library.AddMovie("Only NR", tmdb: "3");
+        onlyNotRated.ProviderIds["Imdb"] = "tt3";
+        Tmdb.Answer(covered, Cert("DE", "16"));
+        Tmdb.Answer(onlyNotRated, Cert("US", "NR"));
+        Omdb.Answer(gap, new RawRating("OMDb", CandidateKind.Certification, "US", "R"));
+
+        await ApplyAsync();
+
+        Assert.DoesNotContain(covered.Id, Omdb.Asked);
+        Assert.Contains(gap.Id, Omdb.Asked);
+        Assert.Contains(onlyNotRated.Id, Omdb.Asked); // an unscorable "NR" doesn't count as covered
+        Assert.Equal("R", gap.CustomRating);
+    }
+
+    [Fact]
+    public async Task Omdb_Counts_EvenWhenTheUsIsNotAMainCountry()
+    {
+        var gap = Library.AddMovie("Gap", tmdb: "2");
+        gap.ProviderIds["Imdb"] = "tt2";
+        Omdb.Answer(gap, new RawRating("OMDb", CandidateKind.Certification, "US", "PG"));
+        Context.Configuration.Countries = "GB, DE";
+        Context.Configuration.FallbackCountries = string.Empty;
+
+        await ApplyAsync();
+
+        Assert.Equal("PG", gap.CustomRating);
+    }
+
+    [Fact]
+    public async Task Omdb_IsSkippedWithoutAKey()
+    {
+        var gap = Library.AddMovie("Gap", tmdb: "2");
+        gap.ProviderIds["Imdb"] = "tt2";
+        Context.Configuration.OmdbApiKey = string.Empty;
+
+        await PreviewAsync();
+
+        Assert.Empty(Omdb.Asked);
+    }
+
+    [Fact]
+    public async Task ReviewRecheck_KeepsOmdbsCache_ToSaveTheDailyQuota()
+    {
+        var gap = Library.AddMovie("Gap", tmdb: "2");
+        gap.ProviderIds["Imdb"] = "tt2";
+        await PreviewAsync();
+
+        await Service.RecheckReviewAsync(apply: false, CancellationToken.None);
+
+        Assert.Equal(TimeSpan.Zero, Tmdb.LastMaxAge);
+        Assert.Equal(TimeSpan.FromDays(Context.Configuration.CacheDays), Omdb.LastMaxAge);
+    }
+
+    [Fact]
     public async Task TvdbRatings_CountForSeries()
     {
         var series = Library.AddSeries("Show", official: "TV-PG");

@@ -73,6 +73,14 @@
                     <div class="inputContainer">
                         <input is="emby-input" type="password" id="TvdbPin" label="TVDb subscriber PIN (only for user-supported keys)" autocomplete="off" />
                     </div>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label><input is="emby-checkbox" type="checkbox" id="UseOmdb" /><span>Use OMDb (IMDb's US rating) for titles nothing else rates</span></label>
+                        <div class="fieldDescription checkboxFieldDescription">Only asked about the gaps, since a free key allows 1,000 lookups a day; a large review list fills in over a few days of runs.</div>
+                    </div>
+                    <div class="inputContainer">
+                        <input is="emby-input" type="password" id="OmdbApiKey" label="OMDb API key" autocomplete="off" />
+                        <div class="fieldDescription">Free from omdbapi.com.</div>
+                    </div>
                     <div class="inputContainer">
                         <input is="emby-input" type="number" id="CacheDays" min="0" label="Cache source lookups for (days)" />
                         <div class="fieldDescription">Titles without a TMDb id are looked up by their IMDb (or TVDb) id when a TMDb key is set.</div>
@@ -204,8 +212,8 @@
 
             <div class="verticalSection">
                 <p class="cs-muted">This product uses the TMDB API but is not endorsed or certified by TMDB.
-                    Common Sense Media ages are retrieved through MDBList; this plugin is not affiliated with or endorsed by
-                    TMDB, MDBList or Common Sense Media.</p>
+                    Common Sense Media ages are retrieved through MDBList, IMDb ratings through OMDb; this plugin is not
+                    affiliated with or endorsed by TMDB, MDBList, OMDb, IMDb or Common Sense Media.</p>
             </div>
         </div>
     </div>
@@ -214,8 +222,8 @@
         (function () {
             var pluginId = '65127be7-01ef-469f-b13b-ecfa1289f5ed';
             var page = document.querySelector('#ratingsFixerConfigPage');
-            var textFields = ['Combine', 'TmdbApiKey', 'Countries', 'FallbackCountries', 'MdblistApiKey', 'TvdbApiKey', 'TvdbPin', 'MovieLadder', 'SeriesLadder', 'LegacyMap', 'UnverifiedRatings'];
-            var boolFields = ['UseTmdb', 'UseCommonSense', 'UseTvdb', 'RoundToNearest', 'RaiseOnly', 'RespectManualCustomRating', 'RespectLockedRating', 'AutoRateNewItems'];
+            var textFields = ['Combine', 'TmdbApiKey', 'Countries', 'FallbackCountries', 'MdblistApiKey', 'TvdbApiKey', 'TvdbPin', 'OmdbApiKey', 'MovieLadder', 'SeriesLadder', 'LegacyMap', 'UnverifiedRatings'];
+            var boolFields = ['UseTmdb', 'UseCommonSense', 'UseTvdb', 'UseOmdb', 'RoundToNearest', 'RaiseOnly', 'RespectManualCustomRating', 'RespectLockedRating', 'AutoRateNewItems'];
             var report = null;
 
             function $(sel) { return page.querySelector(sel); }
