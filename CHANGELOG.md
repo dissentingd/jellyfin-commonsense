@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.0
+
+- **Review panel.** Titles no source could rate are listed with their poster, plot summary, genres and a
+  **suggested rating** with its reasons. Filter by text, genre, decade, type or "has a suggestion"; set a
+  rating per title, or select titles (or everything matching a filter) and accept their suggestions or set
+  them all to one rating. Writes go through the normal path (enforced score, series episodes, ledger — so
+  they can be reverted). Suggestions are never written unless you accept them.
+- **Suggestions** come from: content keywords in a title's tags (→ R), an editable genre → rating map,
+  other titles in the same (franchise-sized) collection, and tag hints like `pre-code` → PG-13. The
+  strictest signal wins, so suggestions err on the safe side. All editable under *Review suggestions*.
+- **Load recommended settings / Undo:** fills the tuning settings with values tuned on a large real
+  library, without touching keys, rules or library choices, and without saving.
+- Long lists (report, written ratings, review) are paged, inside scrolling boxes.
+
 ## 1.2.0
 
 - **OMDb as a gap-filler** (optional, free key from omdbapi.com): IMDb's US rating, asked only about

@@ -337,6 +337,149 @@ public sealed class RatingsFixerService(
         return recheck;
     }
 
+    /// <summary>
+    /// The latest report's review list, with each title's metadata and a suggested rating from its keywords,
+    /// genres, collection siblings and era. Suggestions are never written unless accepted.
+    /// </summary>
+    /// <returns>The review items.</returns>
+    public List<ReviewItem> GetReviewItems()
+    {
+        var report = LoadReport();
+        if (report is null)
+        {
+            return [];
+        }
+
+        var config = Config;
+        var engine = new RatingEngine(scale, ToEngineOptions(config));
+        var suggester = new ReviewSuggester(scale, engine, ToSuggesterOptions(config));
+        var ids = report.Entries.Where(e => e.Kind == DecisionKind.Review).Select(e => e.ItemId).ToHashSet();
+        var siblings = config.SuggestFromCollections ? CollectionSiblings(ids, config.SuggestionCollectionMaxSize) : [];
+        var result = new List<ReviewItem>();
+        foreach (var entry in report.Entries.Where(e => e.Kind == DecisionKind.Review))
+        {
+            if (libraryManager.GetItemById(entry.ItemId) is not { } item)
+            {
+                continue;
+            }
+
+            var facts = new ReviewFacts
+            {
+                IsSeries = item is Series,
+                Year = item.ProductionYear,
+                Genres = item.Genres,
+                Tags = item.Tags,
+                SiblingRatings = siblings.GetValueOrDefault(item.Id, []),
+            };
+            var suggestion = suggester.Suggest(facts);
+            var overview = item.Overview;
+            result.Add(new ReviewItem
+            {
+                ItemId = item.Id,
+                Name = item.Name ?? entry.Name,
+                Year = item.ProductionYear,
+                IsSeries = item is Series,
+                Current = new[] { item.CustomRating, item.OfficialRating }.FirstOrDefault(r => !string.IsNullOrWhiteSpace(r)),
+                Genres = [.. item.Genres],
+                Tags = [.. item.Tags],
+                Overview = overview is { Length: > 400 } ? overview[..400].TrimEnd() + "…" : overview,
+                HasPoster = item.HasImage(ImageType.Primary),
+                Suggestion = suggestion?.Rating,
+                Reasons = [.. suggestion?.Reasons ?? []],
+            });
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Writes ratings chosen in the review panel, through the same path as the plugin's own writes (enforced
+    /// score, series cascade, ledger - so they can be reverted), and takes them off the saved review list.
+    /// </summary>
+    /// <param name="assignments">The choices.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>The report.</returns>
+    public async Task<AssignReport> AssignAsync(IReadOnlyList<ReviewAssignment> assignments, CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var result = new AssignReport();
+            var ledger = RatingLedger.Load(LedgerPath);
+            var written = new Dictionary<Guid, string>();
+            foreach (var choice in assignments)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var rating = choice.Rating.Trim();
+                if (scale.Score(rating) is null)
+                {
+                    result.Errors.Add($"\"{rating}\" isn't a rating this server can score.");
+                    continue;
+                }
+
+                if (libraryManager.GetItemById(choice.ItemId) is not { } item || item is not (Movie or Series))
+                {
+                    result.Errors.Add($"Title {choice.ItemId} isn't in the library.");
+                    continue;
+                }
+
+                try
+                {
+                    var previous = item.CustomRating;
+                    await WriteAsync(item, rating, cancellationToken).ConfigureAwait(false);
+                    var reason = choice.AcceptedSuggestion ? $"accepted suggestion in review: {rating}" : $"set in review: {rating}";
+                    ledger.Upsert(ToLedgerEntry(item, previous, rating, reason));
+                    if (item is Series)
+                    {
+                        result.ChildrenUpdated += await CascadeAsync(item, rating, previous, apply: true, cancellationToken).ConfigureAwait(false);
+                    }
+
+                    written[item.Id] = reason;
+                    result.Written++;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    result.Errors.Add($"{item.Name}: {ex.Message}");
+                }
+            }
+
+            ledger.Save();
+            if (written.Count > 0 && LoadReport() is { } report)
+            {
+                foreach (var entry in report.Entries.Where(e => written.ContainsKey(e.ItemId) && e.Kind == DecisionKind.Review))
+                {
+                    var item = libraryManager.GetItemById(entry.ItemId);
+                    entry.Kind = DecisionKind.Raise;
+                    entry.New = item?.CustomRating;
+                    entry.Applied = true;
+                    entry.Reason = written[entry.ItemId];
+                    report.Counts[nameof(DecisionKind.Review)] = Math.Max(0, report.Counts.GetValueOrDefault(nameof(DecisionKind.Review)) - 1);
+                    report.Counts[nameof(DecisionKind.Raise)] = report.Counts.GetValueOrDefault(nameof(DecisionKind.Raise)) + 1;
+                }
+
+                await File.WriteAllTextAsync(ReportPath, JsonSerializer.Serialize(report, RatingLedger.JsonOptions), cancellationToken).ConfigureAwait(false);
+            }
+
+            return result;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <summary>Builds suggester options from the configuration.</summary>
+    /// <param name="config">The configuration.</param>
+    /// <returns>The options.</returns>
+    public static SuggesterOptions ToSuggesterOptions(PluginConfiguration config) => new()
+    {
+        MatureKeywords = SplitList(config.MatureKeywords),
+        MatureRating = string.IsNullOrWhiteSpace(config.MatureRating) ? "R" : config.MatureRating.Trim(),
+        GenreRatings = ParseMap(config.GenreRatings),
+        UseCollections = config.SuggestFromCollections,
+        EraTags = ParseMap(config.EraTags),
+    };
+
     /// <summary>Gets the titles excluded from re-rating.</summary>
     /// <returns>The entries.</returns>
     public List<ExclusionEntry> GetExclusions() =>
@@ -634,6 +777,44 @@ public sealed class RatingsFixerService(
         }
 
         return hits;
+    }
+
+    /// <summary>For each wanted item, the effective ratings of the other titles in each collection it's in.</summary>
+    private Dictionary<Guid, List<(string Collection, string Rating)>> CollectionSiblings(HashSet<Guid> wanted, int maxSize)
+    {
+        var result = new Dictionary<Guid, List<(string, string)>>();
+        var boxSets = libraryManager.GetItemList(new InternalItemsQuery { IncludeItemTypes = [BaseItemKind.BoxSet], Recursive = true }).OfType<Folder>();
+        foreach (var boxSet in boxSets)
+        {
+            // Only franchise-sized collections: big ones are lists, not families of related titles.
+            if (maxSize > 0 && boxSet.LinkedChildren.Length > maxSize)
+            {
+                continue;
+            }
+
+            var members = boxSet.GetLinkedChildren();
+            var inReview = members.Where(m => wanted.Contains(m.Id)).ToList();
+            if (inReview.Count == 0)
+            {
+                continue;
+            }
+
+            var rated = members
+                .Select(m => (m.Id, Rating: new[] { m.CustomRating, m.OfficialRating }.FirstOrDefault(r => !string.IsNullOrWhiteSpace(r))))
+                .Where(m => m.Rating is not null)
+                .ToList();
+            foreach (var item in inReview)
+            {
+                if (!result.TryGetValue(item.Id, out var list))
+                {
+                    result[item.Id] = list = [];
+                }
+
+                list.AddRange(rated.Where(r => r.Id != item.Id).Select(r => (boxSet.Name ?? "collection", r.Rating!)));
+            }
+        }
+
+        return result;
     }
 
     private IEnumerable<BaseItem> CollectionMembers(string name, List<BaseItem> items, List<string> warnings)

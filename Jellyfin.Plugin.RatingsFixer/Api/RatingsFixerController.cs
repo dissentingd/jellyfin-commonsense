@@ -103,6 +103,50 @@ public class RatingsFixerController(RatingsFixerService service, IRatingScale sc
     public async Task<ActionResult<RunReport>> RecheckReview([FromQuery] bool apply, CancellationToken cancellationToken) =>
         await service.RecheckReviewAsync(apply, cancellationToken).ConfigureAwait(false) is { } report ? report : NotFound();
 
+    /// <summary>
+    /// Gets the recommended values for the tuning settings (policy, countries, suggestions). They're the plugin's
+    /// defaults, which were tuned on a large real library; keys, rules and library choices aren't included.
+    /// </summary>
+    /// <returns>Setting name → recommended value.</returns>
+    [HttpGet("Recommended")]
+    public ActionResult<Dictionary<string, object>> Recommended()
+    {
+        var d = new PluginConfiguration();
+        return new Dictionary<string, object>
+        {
+            [nameof(d.Combine)] = d.Combine.ToString(),
+            [nameof(d.RoundToNearest)] = d.RoundToNearest,
+            [nameof(d.RaiseOnly)] = d.RaiseOnly,
+            [nameof(d.RespectManualCustomRating)] = d.RespectManualCustomRating,
+            [nameof(d.RespectLockedRating)] = d.RespectLockedRating,
+            [nameof(d.Countries)] = d.Countries,
+            [nameof(d.FallbackCountries)] = d.FallbackCountries,
+            [nameof(d.UseCommonSense)] = d.UseCommonSense,
+            [nameof(d.LegacyMap)] = d.LegacyMap,
+            [nameof(d.UnverifiedRatings)] = d.UnverifiedRatings,
+            [nameof(d.CacheDays)] = d.CacheDays,
+            [nameof(d.MatureKeywords)] = d.MatureKeywords,
+            [nameof(d.MatureRating)] = d.MatureRating,
+            [nameof(d.GenreRatings)] = d.GenreRatings,
+            [nameof(d.EraTags)] = d.EraTags,
+            [nameof(d.SuggestFromCollections)] = d.SuggestFromCollections,
+            [nameof(d.SuggestionCollectionMaxSize)] = d.SuggestionCollectionMaxSize,
+        };
+    }
+
+    /// <summary>Gets the review list with metadata and suggested ratings.</summary>
+    /// <returns>The review items.</returns>
+    [HttpGet("Review")]
+    public ActionResult<IEnumerable<ReviewItem>> Review() => service.GetReviewItems();
+
+    /// <summary>Writes ratings chosen in the review panel.</summary>
+    /// <param name="assignments">The choices.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>What was written.</returns>
+    [HttpPost("Review/Assign")]
+    public async Task<ActionResult<AssignReport>> Assign([FromBody] ReviewAssignment[] assignments, CancellationToken cancellationToken) =>
+        await service.AssignAsync(assignments, cancellationToken).ConfigureAwait(false);
+
     /// <summary>Deletes cached source lookups, so the next run asks the sources again.</summary>
     /// <returns>No content.</returns>
     [HttpPost("ClearCache")]

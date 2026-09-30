@@ -23,6 +23,16 @@
                 #ratingsFixerConfigPage .cs-err { color: #e05050; }
                 #ratingsFixerConfigPage .cs-filters { display: flex; gap: .5em; flex-wrap: wrap; align-items: end; }
                 #ratingsFixerConfigPage .cs-filters > * { flex: 1 1 12em; margin: 0; }
+                #ratingsFixerConfigPage .cs-scroll { max-height: 65vh; overflow-y: auto; border: 1px solid rgba(128,128,128,.25); border-radius: 4px; }
+                #ratingsFixerConfigPage .cs-pager { display: flex; align-items: center; gap: .75em; margin: .5em 0; flex-wrap: wrap; }
+                #ratingsFixerConfigPage .cs-pager button { margin: 0; }
+                #ratingsFixerConfigPage .cs-review { display: flex; gap: .75em; padding: .6em; border-bottom: 1px solid rgba(128,128,128,.25); align-items: flex-start; }
+                #ratingsFixerConfigPage .cs-review img, #ratingsFixerConfigPage .cs-noposter { width: 60px; min-width: 60px; height: 90px; object-fit: cover; border-radius: 3px; background: rgba(128,128,128,.2); }
+                #ratingsFixerConfigPage .cs-review-body { flex: 1; min-width: 0; }
+                #ratingsFixerConfigPage .cs-review-body p { margin: .2em 0; }
+                #ratingsFixerConfigPage .cs-suggest { color: #52b54b; }
+                #ratingsFixerConfigPage .cs-review-actions { display: flex; gap: .4em; align-items: center; flex-wrap: wrap; margin-top: .3em; }
+                #ratingsFixerConfigPage .cs-review-actions select { width: auto; }
             </style>
 
             <form id="ratingsFixerConfigForm">
@@ -31,6 +41,12 @@
                     <p class="cs-muted">Writes stricter <b>Custom Ratings</b> so parental controls work on old and unrated titles.
                         The official rating is never touched, and metadata refreshes don't overwrite Custom Ratings.
                         Always run <b>Preview</b> first and read the report below.</p>
+                    <div class="cs-actions">
+                        <button is="emby-button" type="button" class="raised" id="cs-recommended"><span>Load recommended settings</span></button>
+                        <button is="emby-button" type="button" class="raised" id="cs-recommended-undo" disabled><span>Undo</span></button>
+                    </div>
+                    <p class="cs-muted" id="cs-recommended-note">Fills the tuning settings (policy, countries, review suggestions) with values tuned on a large real library.
+                        Your keys, rules and library choices aren't touched, and nothing is saved until you click Save.</p>
                     <p class="cs-warn"><b>Back up Jellyfin's database before your first Apply</b> (Dashboard → Backups, or copy
                         <code>jellyfin.db</code> with the server stopped). Apply edits thousands of items at once; the ledger can
                         re-apply ratings, but only a backup can undo them.</p>
@@ -149,6 +165,32 @@
                     </div>
                 </div>
 
+                <div class="verticalSection">
+                    <h3 class="sectionTitle">Review suggestions</h3>
+                    <p class="cs-muted">For titles no source rates, the Review panel suggests a rating from other metadata. Suggestions are never written unless you accept them; when several signals apply, the strictest wins.</p>
+                    <div class="inputContainer">
+                        <input is="emby-input" type="text" id="MatureKeywords" label="Keywords that suggest mature content" />
+                        <div class="fieldDescription">Comma-separated fragments, matched inside a title's tags (e.g. <code>prostitut</code> matches prostitute and prostitution).</div>
+                    </div>
+                    <div class="inputContainer">
+                        <input is="emby-input" type="text" id="MatureRating" label="Rating those keywords suggest" />
+                    </div>
+                    <div class="inputContainer">
+                        <textarea is="emby-textarea" id="GenreRatings" rows="6" label="Genre suggestions (Genre=Rating, one per line)"></textarea>
+                    </div>
+                    <div class="inputContainer">
+                        <textarea is="emby-textarea" id="EraTags" rows="2" label="Tag hints (tag=Rating, one per line)"></textarea>
+                    </div>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label><input is="emby-checkbox" type="checkbox" id="SuggestFromCollections" /><span>Suggest from other titles in the same collection</span></label>
+                        <div class="fieldDescription checkboxFieldDescription">Sequels and series entries usually share a rating: suggests the strictest rating among a collection's other titles.</div>
+                    </div>
+                    <div class="inputContainer">
+                        <input is="emby-input" type="number" id="SuggestionCollectionMaxSize" min="0" label="Only use collections with at most this many titles" />
+                        <div class="fieldDescription">Franchises are small; big collections are usually lists (top-10s, a whole label's catalogue) that say nothing about a title's rating. 0 = no limit.</div>
+                    </div>
+                </div>
+
                 <button is="emby-button" type="submit" class="raised button-submit block"><span>Save</span></button>
             </form>
 
@@ -167,6 +209,28 @@
                 </div>
                 <p class="cs-muted">Re-check asks the sources afresh (skipping the cache) about just the titles on the report's review list — useful after adding a source or key, or when sources may have added ratings since.</p>
                 <div id="cs-recheck-result"></div>
+            </div>
+
+            <div class="verticalSection">
+                <h3 class="sectionTitle">Review</h3>
+                <p class="cs-muted">Titles no source could rate. Each shows a suggested rating from its keywords, genres, collection and era where one applies —
+                    nothing is written until you set or accept a rating. Everything you write here is in the ledger and can be reverted.</p>
+                <div class="cs-filters">
+                    <div class="inputContainer" style="margin:0"><input is="emby-input" type="search" id="cs-rv-text" label="Search title, genre or keyword" /></div>
+                    <div class="selectContainer" style="margin:0"><select is="emby-select" id="cs-rv-genre" label="Genre"><option value="">All</option></select></div>
+                    <div class="selectContainer" style="margin:0"><select is="emby-select" id="cs-rv-decade" label="Decade"><option value="">All</option></select></div>
+                    <div class="selectContainer" style="margin:0"><select is="emby-select" id="cs-rv-type" label="Type"><option value="">All</option><option value="movie">Movies</option><option value="series">Series</option></select></div>
+                    <div class="selectContainer" style="margin:0"><select is="emby-select" id="cs-rv-suggest" label="Suggestion"><option value="">All</option><option value="yes">Has a suggestion</option><option value="no">No suggestion</option></select></div>
+                </div>
+                <div class="cs-actions">
+                    <button is="emby-button" type="button" class="raised" id="cs-rv-select-all"><span>Select all matching</span></button>
+                    <button is="emby-button" type="button" class="raised" id="cs-rv-select-none"><span>Clear selection</span></button>
+                    <button is="emby-button" type="button" class="raised" id="cs-rv-accept"><span>Accept suggestions for selected</span></button>
+                    <div class="selectContainer" style="margin:0"><select is="emby-select" id="cs-rv-bulk-rating" label="Set selected to"></select></div>
+                    <button is="emby-button" type="button" class="raised" id="cs-rv-bulk-set"><span>Set</span></button>
+                </div>
+                <div id="cs-review"><p class="cs-muted">Loading…</p></div>
+                <div id="cs-review-result"></div>
             </div>
 
             <div class="verticalSection">
@@ -222,8 +286,8 @@
         (function () {
             var pluginId = '65127be7-01ef-469f-b13b-ecfa1289f5ed';
             var page = document.querySelector('#ratingsFixerConfigPage');
-            var textFields = ['Combine', 'TmdbApiKey', 'Countries', 'FallbackCountries', 'MdblistApiKey', 'TvdbApiKey', 'TvdbPin', 'OmdbApiKey', 'MovieLadder', 'SeriesLadder', 'LegacyMap', 'UnverifiedRatings'];
-            var boolFields = ['UseTmdb', 'UseCommonSense', 'UseTvdb', 'UseOmdb', 'RoundToNearest', 'RaiseOnly', 'RespectManualCustomRating', 'RespectLockedRating', 'AutoRateNewItems'];
+            var textFields = ['Combine', 'TmdbApiKey', 'Countries', 'FallbackCountries', 'MdblistApiKey', 'TvdbApiKey', 'TvdbPin', 'OmdbApiKey', 'MovieLadder', 'SeriesLadder', 'LegacyMap', 'UnverifiedRatings', 'MatureKeywords', 'MatureRating', 'GenreRatings', 'EraTags'];
+            var boolFields = ['UseTmdb', 'UseCommonSense', 'UseTvdb', 'UseOmdb', 'RoundToNearest', 'RaiseOnly', 'RespectManualCustomRating', 'RespectLockedRating', 'AutoRateNewItems', 'SuggestFromCollections'];
             var report = null;
 
             function $(sel) { return page.querySelector(sel); }
@@ -257,6 +321,7 @@
                     textFields.forEach(function (f) { $('#' + f).value = config[f] || ''; });
                     boolFields.forEach(function (f) { $('#' + f).checked = !!config[f]; });
                     $('#CacheDays').value = config.CacheDays;
+                    $('#SuggestionCollectionMaxSize').value = config.SuggestionCollectionMaxSize;
                     loadLibraries(config.LibraryIds || []);
                     loadPresets();
                     $('#cs-rules').innerHTML = '';
@@ -273,6 +338,7 @@
                     textFields.forEach(function (f) { config[f] = $('#' + f).value; });
                     boolFields.forEach(function (f) { config[f] = $('#' + f).checked; });
                     config.CacheDays = parseInt($('#CacheDays').value, 10) || 0;
+                    config.SuggestionCollectionMaxSize = parseInt($('#SuggestionCollectionMaxSize').value, 10) || 0;
                     config.LibraryIds = Array.prototype.map.call(page.querySelectorAll('.cs-library:checked'), function (c) { return c.value; });
                     config.Rules = Array.prototype.map.call(page.querySelectorAll('.cs-rule'), function (row) {
                         return {
@@ -371,13 +437,43 @@
                 });
             }
 
+            var pages = { report: 0, ledger: 0, review: 0 };
+            var pageSizes = { report: 50, ledger: 50, review: 25 };
+
+            function pageOf(key, rows) {
+                var size = pageSizes[key];
+                var last = Math.max(0, Math.ceil(rows.length / size) - 1);
+                if (pages[key] > last) { pages[key] = last; }
+                return rows.slice(pages[key] * size, (pages[key] + 1) * size);
+            }
+
+            function pagerHtml(key, total) {
+                var size = pageSizes[key];
+                var count = Math.max(1, Math.ceil(total / size));
+                var current = pages[key];
+                return '<div class="cs-pager">' +
+                    '<button is="emby-button" type="button" class="raised" data-pager="' + key + '" data-dir="-1"' + (current <= 0 ? ' disabled' : '') + '><span>‹ Previous</span></button>' +
+                    '<span>Page ' + (current + 1) + ' of ' + count + '</span>' +
+                    '<button is="emby-button" type="button" class="raised" data-pager="' + key + '" data-dir="1"' + (current >= count - 1 ? ' disabled' : '') + '><span>Next ›</span></button>' +
+                    '</div>';
+            }
+
+            function bindPager(container, rerender) {
+                Array.prototype.forEach.call(container.querySelectorAll('[data-pager]'), function (button) {
+                    button.addEventListener('click', function () {
+                        pages[button.getAttribute('data-pager')] += parseInt(button.getAttribute('data-dir'), 10);
+                        rerender();
+                    });
+                });
+            }
+
             function renderLedger() {
                 var rows = ledgerMatches();
-                var shown = rows.slice(0, 300);
+                var shown = pageOf('ledger', rows);
                 var count = Object.keys(selected).length;
-                var html = '<p class="cs-muted">' + rows.length + ' of ' + ledgerEntries.length + ' written rating(s) match' +
-                    (rows.length > shown.length ? ', showing the first 300' : '') + '. <b>' + count + ' selected.</b></p>' +
-                    '<table class="cs-table"><thead><tr><th></th><th>Title</th><th>Rating</th><th>Before</th><th>Why</th></tr></thead><tbody>';
+                var html = '<p class="cs-muted">' + rows.length + ' of ' + ledgerEntries.length + ' written rating(s) match. <b>' + count + ' selected.</b></p>' +
+                    pagerHtml('ledger', rows.length) +
+                    '<div class="cs-scroll"><table class="cs-table"><thead><tr><th></th><th>Title</th><th>Rating</th><th>Before</th><th>Why</th></tr></thead><tbody>';
                 shown.forEach(function (e) {
                     var id = prop(e, 'ItemId');
                     html += '<tr><td><input type="checkbox" class="cs-ledger-pick" data-id="' + esc(id) + '"' + (selected[id] ? ' checked' : '') + ' /></td>' +
@@ -386,7 +482,8 @@
                         '<td>' + esc(prop(e, 'PreviousCustomRating') || prop(e, 'PreviousOfficialRating') || '—') + '</td>' +
                         '<td>' + esc(prop(e, 'Reason')) + '</td></tr>';
                 });
-                $('#cs-ledger-rows').innerHTML = html + '</tbody></table>';
+                $('#cs-ledger-rows').innerHTML = html + '</tbody></table></div>' + pagerHtml('ledger', rows.length);
+                bindPager($('#cs-ledger-rows'), renderLedger);
                 Array.prototype.forEach.call(page.querySelectorAll('.cs-ledger-pick'), function (box) {
                     box.addEventListener('change', function () {
                         if (box.checked) { selected[box.getAttribute('data-id')] = true; } else { delete selected[box.getAttribute('data-id')]; }
@@ -450,6 +547,42 @@
                 });
             }
 
+            var beforeRecommended = null;
+
+            function fieldValue(name) {
+                var el = $('#' + name);
+                return el.type === 'checkbox' ? el.checked : el.value;
+            }
+
+            function setField(name, value) {
+                var el = $('#' + name);
+                if (!el) { return; }
+                if (el.type === 'checkbox') { el.checked = !!value; } else { el.value = value; }
+            }
+
+            function loadRecommended() {
+                ApiClient.ajax({ type: 'GET', url: ApiClient.getUrl('RatingsFixer/Recommended'), dataType: 'json' }).then(function (rec) {
+                    beforeRecommended = {};
+                    Object.keys(rec).forEach(function (key) {
+                        var name = key.charAt(0).toUpperCase() + key.slice(1); // field ids are PascalCase
+                        if ($('#' + name)) {
+                            beforeRecommended[name] = fieldValue(name);
+                            setField(name, rec[key]);
+                        }
+                    });
+                    $('#cs-recommended-undo').disabled = false;
+                    $('#cs-recommended-note').innerHTML = '<b>Recommended settings loaded — click Save to keep them, or Undo.</b>';
+                });
+            }
+
+            function undoRecommended() {
+                if (!beforeRecommended) { return; }
+                Object.keys(beforeRecommended).forEach(function (name) { setField(name, beforeRecommended[name]); });
+                beforeRecommended = null;
+                $('#cs-recommended-undo').disabled = true;
+                $('#cs-recommended-note').innerHTML = 'Your previous values are back (not saved yet — click Save if you had saved the recommended ones).';
+            }
+
             function recheckReview() {
                 var apply = $('#cs-recheck-apply').checked;
                 if (apply && !window.confirm('Re-check the review list and write any ratings found?')) { return; }
@@ -459,6 +592,7 @@
                     $('#cs-recheck-result').innerHTML = '<p>Re-checked ' + esc(prop(r, 'ItemsScanned') || 0) + ' title(s): ' + esc(counts.Raise || 0) + ' now have a rating' +
                         (apply ? ' (written)' : ' (not written yet — tick the box above, or run Apply)') + ', ' + esc(counts.Review || 0) + ' still need review.</p>';
                     loadReport();
+                    loadReview();
                 }, function () {
                     $('#cs-recheck-result').innerHTML = '<p class="cs-err">No report yet — run a preview first.</p>';
                 });
@@ -493,8 +627,8 @@
                     '<div class="inputContainer" style="margin:0"><input is="emby-input" type="search" id="cs-filter-text" label="Search" /></div></div>' +
                     '<div id="cs-rows"></div>';
                 $('#cs-report').innerHTML = html;
-                $('#cs-filter-kind').addEventListener('change', renderRows);
-                $('#cs-filter-text').addEventListener('input', renderRows);
+                $('#cs-filter-kind').addEventListener('change', function () { pages.report = 0; renderRows(); });
+                $('#cs-filter-text').addEventListener('input', function () { pages.report = 0; renderRows(); });
                 renderRows();
             }
 
@@ -506,9 +640,9 @@
                     var k = e.Kind || e.kind;
                     return (!kind || k === kind) && (!text || String(e.Name || e.name).toLowerCase().indexOf(text) >= 0);
                 });
-                var shown = rows.slice(0, 500);
-                var html = '<p class="cs-muted">' + rows.length + ' item(s)' + (rows.length > shown.length ? ', showing the first 500' : '') + '.</p>' +
-                    '<table class="cs-table"><thead><tr><th>Title</th><th>Current</th><th>New</th><th>Why</th></tr></thead><tbody>';
+                var shown = pageOf('report', rows);
+                var html = '<p class="cs-muted">' + rows.length + ' item(s).</p>' + pagerHtml('report', rows.length) +
+                    '<div class="cs-scroll"><table class="cs-table"><thead><tr><th>Title</th><th>Current</th><th>New</th><th>Why</th></tr></thead><tbody>';
                 shown.forEach(function (e) {
                     var cands = (e.Candidates || e.candidates || []).join('\n');
                     var err = e.Error || e.error;
@@ -519,7 +653,148 @@
                         ((e.ChildrenUpdated || e.childrenUpdated) ? ' <span class="cs-muted">+' + esc(e.ChildrenUpdated || e.childrenUpdated) + ' episodes</span>' : '') + '</td>' +
                         '<td title="' + esc(cands) + '">' + esc(e.Reason || e.reason) + (err ? '<div class="cs-err">' + esc(err) + '</div>' : '') + '</td></tr>';
                 });
-                $('#cs-rows').innerHTML = html + '</tbody></table>';
+                $('#cs-rows').innerHTML = html + '</tbody></table></div>' + pagerHtml('report', rows.length);
+                bindPager($('#cs-rows'), renderRows);
+            }
+
+            var reviewItems = [];
+            var reviewSelected = {};
+
+            function ladderOptions(isSeries, chosen) {
+                var ladder = ($(isSeries ? '#SeriesLadder' : '#MovieLadder').value || '').split(',').map(function (x) { return x.trim(); }).filter(function (x) { return x; });
+                if (ladder.indexOf('XXX') < 0) { ladder.push('XXX'); }
+                return ladder.map(function (r) { return '<option value="' + esc(r) + '"' + (r === chosen ? ' selected' : '') + '>' + esc(r) + '</option>'; }).join('');
+            }
+
+            function loadReview() {
+                ApiClient.ajax({ type: 'GET', url: ApiClient.getUrl('RatingsFixer/Review'), dataType: 'json' }).then(function (items) {
+                    reviewItems = items || [];
+                    reviewSelected = {};
+                    var genres = {};
+                    var decades = {};
+                    reviewItems.forEach(function (i) {
+                        (prop(i, 'Genres') || []).forEach(function (g) { genres[g] = (genres[g] || 0) + 1; });
+                        var y = prop(i, 'Year');
+                        decades[y ? Math.floor(y / 10) * 10 : 0] = true;
+                    });
+                    $('#cs-rv-genre').innerHTML = '<option value="">All</option>' + Object.keys(genres).sort().map(function (g) {
+                        return '<option value="' + esc(g) + '">' + esc(g) + ' (' + genres[g] + ')</option>';
+                    }).join('');
+                    $('#cs-rv-decade').innerHTML = '<option value="">All</option>' + Object.keys(decades).sort().map(function (d) {
+                        return '<option value="' + d + '">' + (d === '0' ? 'Unknown' : d + 's') + '</option>';
+                    }).join('');
+                    $('#cs-rv-bulk-rating').innerHTML = ladderOptions(false, 'R');
+                    renderReview();
+                }, function () {
+                    $('#cs-review').innerHTML = '<p class="cs-muted">No report yet — run a preview.</p>';
+                });
+            }
+
+            function reviewMatches() {
+                var text = $('#cs-rv-text').value.toLowerCase();
+                var genre = $('#cs-rv-genre').value;
+                var decade = $('#cs-rv-decade').value;
+                var type = $('#cs-rv-type').value;
+                var suggest = $('#cs-rv-suggest').value;
+                return reviewItems.filter(function (i) {
+                    var genres = prop(i, 'Genres') || [];
+                    var y = prop(i, 'Year');
+                    if (genre && genres.indexOf(genre) < 0) { return false; }
+                    if (decade && String(y ? Math.floor(y / 10) * 10 : 0) !== decade) { return false; }
+                    if (type && (prop(i, 'IsSeries') ? 'series' : 'movie') !== type) { return false; }
+                    if (suggest === 'yes' && !prop(i, 'Suggestion')) { return false; }
+                    if (suggest === 'no' && prop(i, 'Suggestion')) { return false; }
+                    if (!text) { return true; }
+                    return [prop(i, 'Name'), genres.join(' '), (prop(i, 'Tags') || []).join(' ')].join(' ').toLowerCase().indexOf(text) >= 0;
+                });
+            }
+
+            function renderReview() {
+                var rows = reviewMatches();
+                var shown = pageOf('review', rows);
+                var suggested = rows.filter(function (i) { return prop(i, 'Suggestion'); }).length;
+                var html = '<p class="cs-muted">' + rows.length + ' of ' + reviewItems.length + ' title(s) match, ' + suggested + ' with a suggestion. <b>' +
+                    Object.keys(reviewSelected).length + ' selected.</b></p>' + pagerHtml('review', rows.length) + '<div class="cs-scroll">';
+                shown.forEach(function (i) {
+                    var id = prop(i, 'ItemId');
+                    var isSeries = prop(i, 'IsSeries');
+                    var suggestion = prop(i, 'Suggestion');
+                    var poster = prop(i, 'HasPoster')
+                        ? '<img loading="lazy" alt="" src="' + esc(ApiClient.getScaledImageUrl(id, { type: 'Primary', maxHeight: 180 })) + '" />'
+                        : '<div class="cs-noposter"></div>';
+                    html += '<div class="cs-review">' +
+                        '<input type="checkbox" class="cs-rv-pick" data-id="' + esc(id) + '"' + (reviewSelected[id] ? ' checked' : '') + ' />' + poster +
+                        '<div class="cs-review-body">' +
+                        '<p><b>' + esc(prop(i, 'Name')) + '</b>' + (prop(i, 'Year') ? ' (' + esc(prop(i, 'Year')) + ')' : '') + (isSeries ? ' <span class="cs-muted">series</span>' : '') +
+                        ' <span class="cs-muted">— currently ' + esc(prop(i, 'Current') || 'unrated') + '</span></p>' +
+                        '<p class="cs-muted">' + esc((prop(i, 'Genres') || []).join(', ')) + '</p>' +
+                        (prop(i, 'Overview') ? '<p>' + esc(prop(i, 'Overview')) + '</p>' : '') +
+                        (suggestion ? '<p class="cs-suggest">Suggested: <b>' + esc(suggestion) + '</b> — ' + esc((prop(i, 'Reasons') || []).join('; ')) + '</p>' : '<p class="cs-muted">No suggestion.</p>') +
+                        '<div class="cs-review-actions">' +
+                        '<select class="cs-rv-rating" data-id="' + esc(id) + '">' + ladderOptions(isSeries, suggestion || '') + '</select>' +
+                        '<button is="emby-button" type="button" class="raised cs-rv-set" data-id="' + esc(id) + '"><span>Set</span></button>' +
+                        (suggestion ? '<button is="emby-button" type="button" class="raised cs-rv-accept-one" data-id="' + esc(id) + '"><span>Accept ' + esc(suggestion) + '</span></button>' : '') +
+                        '</div></div></div>';
+                });
+                $('#cs-review').innerHTML = html + '</div>' + pagerHtml('review', rows.length);
+                bindPager($('#cs-review'), renderReview);
+                Array.prototype.forEach.call(page.querySelectorAll('.cs-rv-pick'), function (box) {
+                    box.addEventListener('change', function () {
+                        if (box.checked) { reviewSelected[box.getAttribute('data-id')] = true; } else { delete reviewSelected[box.getAttribute('data-id')]; }
+                        renderReview();
+                    });
+                });
+                Array.prototype.forEach.call(page.querySelectorAll('.cs-rv-set'), function (button) {
+                    button.addEventListener('click', function () {
+                        var id = button.getAttribute('data-id');
+                        var select = page.querySelector('.cs-rv-rating[data-id="' + id + '"]');
+                        assign([{ ItemId: id, Rating: select.value, AcceptedSuggestion: false }]);
+                    });
+                });
+                Array.prototype.forEach.call(page.querySelectorAll('.cs-rv-accept-one'), function (button) {
+                    button.addEventListener('click', function () {
+                        var item = findReview(button.getAttribute('data-id'));
+                        assign([{ ItemId: prop(item, 'ItemId'), Rating: prop(item, 'Suggestion'), AcceptedSuggestion: true }]);
+                    });
+                });
+            }
+
+            function findReview(id) {
+                return reviewItems.filter(function (i) { return prop(i, 'ItemId') === id; })[0];
+            }
+
+            function assign(choices, confirmText) {
+                if (!choices.length) { Dashboard.alert('Nothing to write — select titles first.'); return; }
+                if (confirmText && !window.confirm(confirmText)) { return; }
+                ApiClient.ajax({
+                    type: 'POST',
+                    url: ApiClient.getUrl('RatingsFixer/Review/Assign'),
+                    data: JSON.stringify(choices),
+                    contentType: 'application/json',
+                    dataType: 'json'
+                }).then(function (r) {
+                    var errors = prop(r, 'Errors') || [];
+                    $('#cs-review-result').innerHTML = '<p>Wrote ' + esc(prop(r, 'Written')) + ' rating(s)' +
+                        (prop(r, 'ChildrenUpdated') ? ' and gave ' + esc(prop(r, 'ChildrenUpdated')) + ' season(s)/episode(s) their series&#39; rating' : '') + '.</p>' +
+                        errors.map(function (e) { return '<p class="cs-err">' + esc(e) + '</p>'; }).join('');
+                    loadReview();
+                    loadLedger();
+                    loadReport();
+                });
+            }
+
+            function acceptSelected() {
+                var choices = Object.keys(reviewSelected).map(findReview).filter(function (i) { return i && prop(i, 'Suggestion'); }).map(function (i) {
+                    return { ItemId: prop(i, 'ItemId'), Rating: prop(i, 'Suggestion'), AcceptedSuggestion: true };
+                });
+                var skipped = Object.keys(reviewSelected).length - choices.length;
+                assign(choices, 'Write the suggested rating for ' + choices.length + ' title(s)?' + (skipped ? '\n' + skipped + ' selected title(s) have no suggestion and will be left alone.' : ''));
+            }
+
+            function setSelected() {
+                var rating = $('#cs-rv-bulk-rating').value;
+                var choices = Object.keys(reviewSelected).map(function (id) { return { ItemId: id, Rating: rating, AcceptedSuggestion: false }; });
+                assign(choices, 'Set ' + choices.length + ' title(s) to ' + rating + '?');
             }
 
             function restoreFromFile(file) {
@@ -551,11 +826,24 @@
 
             page.addEventListener('pageshow', load);
             page.addEventListener('pageshow', loadLedger);
+            page.addEventListener('pageshow', loadReview);
             page.addEventListener('pageshow', loadExclusions);
             $('#ratingsFixerConfigForm').addEventListener('submit', save);
             $('#cs-add-rule').addEventListener('click', function () { addRule(); });
             $('#cs-preset').addEventListener('change', applyPreset);
-            $('#cs-ledger-filter').addEventListener('input', renderLedger);
+            $('#cs-ledger-filter').addEventListener('input', function () { pages.ledger = 0; renderLedger(); });
+            ['#cs-rv-text', '#cs-rv-genre', '#cs-rv-decade', '#cs-rv-type', '#cs-rv-suggest'].forEach(function (sel) {
+                $(sel).addEventListener(sel === '#cs-rv-text' ? 'input' : 'change', function () { pages.review = 0; renderReview(); });
+            });
+            $('#cs-rv-select-all').addEventListener('click', function () {
+                reviewMatches().forEach(function (i) { reviewSelected[prop(i, 'ItemId')] = true; });
+                renderReview();
+            });
+            $('#cs-rv-select-none').addEventListener('click', function () { reviewSelected = {}; renderReview(); });
+            $('#cs-rv-accept').addEventListener('click', acceptSelected);
+            $('#cs-recommended').addEventListener('click', loadRecommended);
+            $('#cs-recommended-undo').addEventListener('click', undoRecommended);
+            $('#cs-rv-bulk-set').addEventListener('click', setSelected);
             $('#cs-ledger-select-all').addEventListener('click', function () {
                 ledgerMatches().forEach(function (e) { selected[prop(e, 'ItemId')] = true; });
                 renderLedger();

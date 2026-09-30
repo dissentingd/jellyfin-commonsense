@@ -73,6 +73,69 @@ public sealed class RunReport
     public List<ReportEntry> Entries { get; set; } = [];
 }
 
+/// <summary>A title on the review list, with what's known about it and a suggested rating.</summary>
+public sealed class ReviewItem
+{
+    /// <summary>Gets or sets the item id.</summary>
+    public Guid ItemId { get; set; }
+
+    /// <summary>Gets or sets the name.</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the production year.</summary>
+    public int? Year { get; set; }
+
+    /// <summary>Gets or sets a value indicating whether it's a series.</summary>
+    public bool IsSeries { get; set; }
+
+    /// <summary>Gets or sets the current effective rating, if any.</summary>
+    public string? Current { get; set; }
+
+    /// <summary>Gets or sets the genres.</summary>
+    public List<string> Genres { get; set; } = [];
+
+    /// <summary>Gets or sets the tags (keywords).</summary>
+    public List<string> Tags { get; set; } = [];
+
+    /// <summary>Gets or sets the plot summary (shortened).</summary>
+    public string? Overview { get; set; }
+
+    /// <summary>Gets or sets a value indicating whether the title has a poster.</summary>
+    public bool HasPoster { get; set; }
+
+    /// <summary>Gets or sets the suggested rating, if any signal applies.</summary>
+    public string? Suggestion { get; set; }
+
+    /// <summary>Gets or sets why.</summary>
+    public List<string> Reasons { get; set; } = [];
+}
+
+/// <summary>A rating chosen in the review panel.</summary>
+public sealed class ReviewAssignment
+{
+    /// <summary>Gets or sets the item id.</summary>
+    public Guid ItemId { get; set; }
+
+    /// <summary>Gets or sets the rating to write.</summary>
+    public string Rating { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets a value indicating whether it was an accepted suggestion (recorded in the ledger).</summary>
+    public bool AcceptedSuggestion { get; set; }
+}
+
+/// <summary>What writing review choices did.</summary>
+public sealed class AssignReport
+{
+    /// <summary>Gets or sets titles written.</summary>
+    public int Written { get; set; }
+
+    /// <summary>Gets or sets seasons and episodes given their series' new rating.</summary>
+    public int ChildrenUpdated { get; set; }
+
+    /// <summary>Gets or sets problems (unknown rating, missing title, write errors).</summary>
+    public List<string> Errors { get; set; } = [];
+}
+
 /// <summary>What a revert found and did.</summary>
 public sealed class RevertReport
 {

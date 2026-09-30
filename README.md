@@ -42,9 +42,11 @@ history problem:
   `R`, never `NC-17`; `NC-17` and `XXX` only come from your rules or an actual `NC-17`.
 - **Raise-only by default** — never loosens a rating, and leaves hand-set Custom Ratings and locked
   rating fields alone.
-- Titles it can't decide (unrated with no source, or `Approved` with nothing modern) go on a
-  **review list** instead of being guessed. Turn on **Block unrated items** for children's accounts to
-  hide those too.
+- Titles it can't decide (unrated with no source, or `Approved` with nothing modern) go on a **review
+  list** instead of being guessed. The **Review panel** shows each with its poster, summary and a suggested
+  rating from its keywords, genres, franchise and era — accept suggestions one by one or in bulk, or pick a
+  rating yourself. Nothing there is written without you. **Block unrated items** on children's accounts
+  covers the rest.
 - Copies a series' rating to its **seasons and episodes** (Jellyfin enforces each episode separately),
   including episodes added later.
 - Lets you **revert** any rating it wrote (a series' episodes too), optionally excluding the title from

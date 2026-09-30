@@ -232,6 +232,13 @@ public sealed class RatingEngine
     /// on a sub-scored step when a plain step shares its score — so a foreign 18 becomes <c>R</c>, not
     /// <c>NC-17</c> (while a series still reaches <c>TV-MA</c>, the only 17 on its ladder).
     /// </summary>
+    /// <summary>Puts a score onto the movie or series ladder, the same way source ratings are mapped.</summary>
+    /// <param name="score">The score.</param>
+    /// <param name="isSeries">Whether to use the series ladder.</param>
+    /// <returns>The ladder rating, or null when no ladder is configured.</returns>
+    public string? RatingFor(RatingScore score, bool isSeries) =>
+        MapToLadder(isSeries ? _seriesLadder : _movieLadder, score, _options.RoundToNearest)?.Rating;
+
     private static (string Rating, RatingScore Score)? MapToLadder(List<(string Rating, RatingScore Score)> ladder, RatingScore needed, bool nearest)
     {
         var steps = ladder

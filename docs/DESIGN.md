@@ -137,6 +137,23 @@ kept and the rest is picked up on a later run.
 - **Export** snapshots every Custom Rating in the library (including hand-set ones) in ledger format.
 - Jellyfin's NFO saver (if enabled) also writes `<customrating>`, giving a second copy beside the media (verified).
 
+## Review panel and suggestions
+
+For review-list titles, `ReviewSuggester` (pure, unit-tested) collects signals, each proposing a rating
+with a reason; the strictest wins (erring safe) and is mapped onto the item's ladder:
+
+- **Content keywords** in the title's tags (TMDb keywords, for most libraries) → `R` by default.
+- **Genre map** (default Horror → R; Thriller/Crime/War/Documentary → PG-13; Animation/Family → PG).
+- **Collection siblings**: the strictest rating among the other titles of each collection it's in —
+  only collections with at most 30 titles. Measured on a real library: collections of ≤ 28 titles were
+  franchises; lists (a label's whole catalogue, top-10s, "stand-up specials") ran to hundreds and made
+  every member look as strict as its strictest entry.
+- **Tag hints** (default `pre-code` → PG-13).
+
+Suggestions are **never written automatically** — a wrong guess could expose content to children. The
+panel writes only what the admin sets or accepts, through the normal write path, recorded in the ledger
+(revertable). On a real review list of ~3,400 titles, ~54% got a suggestion; the rest have nothing to go on.
+
 ## Revert and exclusions
 
 - The ledger keeps, per item, the custom and official rating from *before the plugin first wrote it*:
@@ -158,7 +175,8 @@ kept and the rest is picked up on a later run.
   ledger download/export/restore, and the latest report with filters.
 - **Scheduled tasks** (category *Ratings Fixer*): Preview, Apply, Restore. No default triggers.
 - **API** (admin only, `/RatingsFixer/...`): `Report`, `Ledger`, `LedgerEntries`, `Revert?apply=&exclude=`,
-  `Exclusions`, `Exclusions/Remove`, `RecheckReview?apply=`, `Presets`, `Export`, `Restore?apply=`, `ClearCache`,
+  `Exclusions`, `Exclusions/Remove`, `RecheckReview?apply=`, `Review`, `Review/Assign`, `Recommended`, `Presets`,
+  `Export`, `Restore?apply=`, `ClearCache`,
   `Score?rating=&country=` (scores a rating exactly as the server does — for checking mappings).
 - **Auto-rate** (opt-in): movies/series whose metadata was downloaded, and the series of newly added
   episodes, are batched for a minute, then run through Apply. The plugin's own writes use `MetadataEdit`, so they don't re-trigger it.
