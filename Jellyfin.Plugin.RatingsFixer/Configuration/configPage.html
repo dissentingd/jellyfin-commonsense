@@ -394,7 +394,7 @@
                     var select = $('#cs-preset');
                     select.innerHTML = '<option value="">Choose a country to fill in the ladders below…</option>' + presets.map(function (p) {
                         var c = p.Country || p.country;
-                        return '<option value="' + esc(c) + '">' + esc(p.Name || p.name) + (c === serverCountry ? ' — your server' : '') + '</option>';
+                        return '<option value="' + esc(c) + '">' + esc(p.Name || p.name) + '</option>';
                     }).join('');
                     if (serverCountry) {
                         $('#cs-preset-hint').innerHTML = 'Your server\'s metadata country is <b>' + esc(serverCountry) + '</b>. Pick the country your libraries\' Metadata country is set to — Jellyfin scores ratings with that country\'s table.';
@@ -471,7 +471,7 @@
                 var rows = ledgerMatches();
                 var shown = pageOf('ledger', rows);
                 var count = Object.keys(selected).length;
-                var html = '<p class="cs-muted">' + rows.length + ' of ' + ledgerEntries.length + ' written rating(s) match. <b>' + count + ' selected.</b></p>' +
+                var html = '<p class="cs-muted">' + rows.length + ' of ' + ledgerEntries.length + ' written rating(s) match. <b id="cs-ledger-count">' + count + ' selected.</b></p>' +
                     pagerHtml('ledger', rows.length) +
                     '<div class="cs-scroll"><table class="cs-table"><thead><tr><th></th><th>Title</th><th>Rating</th><th>Before</th><th>Why</th></tr></thead><tbody>';
                 shown.forEach(function (e) {
@@ -487,7 +487,8 @@
                 Array.prototype.forEach.call(page.querySelectorAll('.cs-ledger-pick'), function (box) {
                     box.addEventListener('change', function () {
                         if (box.checked) { selected[box.getAttribute('data-id')] = true; } else { delete selected[box.getAttribute('data-id')]; }
-                        renderLedger();
+                        // Just update the count: redrawing the list would jump back to its top.
+                        $('#cs-ledger-count').textContent = Object.keys(selected).length + ' selected.';
                     });
                 });
             }
@@ -659,6 +660,7 @@
 
             var reviewItems = [];
             var reviewSelected = {};
+            var keepReviewScroll = false;
 
             function ladderOptions(isSeries, chosen) {
                 var ladder = ($(isSeries ? '#SeriesLadder' : '#MovieLadder').value || '').split(',').map(function (x) { return x.trim(); }).filter(function (x) { return x; });
@@ -713,7 +715,7 @@
                 var rows = reviewMatches();
                 var shown = pageOf('review', rows);
                 var suggested = rows.filter(function (i) { return prop(i, 'Suggestion'); }).length;
-                var html = '<p class="cs-muted">' + rows.length + ' of ' + reviewItems.length + ' title(s) match, ' + suggested + ' with a suggestion. <b>' +
+                var html = '<p class="cs-muted">' + rows.length + ' of ' + reviewItems.length + ' title(s) match, ' + suggested + ' with a suggestion. <b id="cs-rv-count">' +
                     Object.keys(reviewSelected).length + ' selected.</b></p>' + pagerHtml('review', rows.length) + '<div class="cs-scroll">';
                 shown.forEach(function (i) {
                     var id = prop(i, 'ItemId');
@@ -736,12 +738,21 @@
                         (suggestion ? '<button is="emby-button" type="button" class="raised cs-rv-accept-one" data-id="' + esc(id) + '"><span>Accept ' + esc(suggestion) + '</span></button>' : '') +
                         '</div></div></div>';
                 });
+                var oldBox = $('#cs-review .cs-scroll');
+                var boxTop = keepReviewScroll && oldBox ? oldBox.scrollTop : 0;
+                var pageTop = window.pageYOffset;
                 $('#cs-review').innerHTML = html + '</div>' + pagerHtml('review', rows.length);
+                if (keepReviewScroll) {
+                    $('#cs-review .cs-scroll').scrollTop = boxTop;
+                    window.scrollTo(0, pageTop);
+                    keepReviewScroll = false;
+                }
                 bindPager($('#cs-review'), renderReview);
                 Array.prototype.forEach.call(page.querySelectorAll('.cs-rv-pick'), function (box) {
                     box.addEventListener('change', function () {
                         if (box.checked) { reviewSelected[box.getAttribute('data-id')] = true; } else { delete reviewSelected[box.getAttribute('data-id')]; }
-                        renderReview();
+                        // Just update the count: redrawing the list would jump back to its top.
+                        $('#cs-rv-count').textContent = Object.keys(reviewSelected).length + ' selected.';
                     });
                 });
                 Array.prototype.forEach.call(page.querySelectorAll('.cs-rv-set'), function (button) {
@@ -777,6 +788,7 @@
                     $('#cs-review-result').innerHTML = '<p>Wrote ' + esc(prop(r, 'Written')) + ' rating(s)' +
                         (prop(r, 'ChildrenUpdated') ? ' and gave ' + esc(prop(r, 'ChildrenUpdated')) + ' season(s)/episode(s) their series&#39; rating' : '') + '.</p>' +
                         errors.map(function (e) { return '<p class="cs-err">' + esc(e) + '</p>'; }).join('');
+                    keepReviewScroll = true; // stay where you were in the list after a write
                     loadReview();
                     loadLedger();
                     loadReport();
