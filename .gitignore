@@ -11,3 +11,6 @@ TestResults/
 
 # Local working notes (not published)
 CLAUDE.md
+
+# Private snapshots of a live ledger (contain library titles)
+local-backups/
